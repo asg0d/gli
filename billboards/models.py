@@ -24,6 +24,31 @@ class Employee(models.Model):
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
 
+class Category(models.Model):
+    """Модель категории рекламных конструкций"""
+    name = models.CharField('Название', max_length=100, unique=True)
+    slug = models.SlugField('Слаг', max_length=100, unique=True, help_text='Используется в URL и API')
+    description = models.TextField('Описание', blank=True)
+    icon = models.CharField('Иконка', max_length=50, blank=True, help_text='Название иконки (например: monitor, bus)')
+    color = models.CharField('Цвет', max_length=7, default='#3b82f6', help_text='Цвет в формате HEX (#3b82f6)')
+    is_active = models.BooleanField('Активна', default=True)
+    order = models.PositiveIntegerField('Порядок сортировки', default=0)
+    created_at = models.DateTimeField('Дата создания', auto_now_add=True)
+    updated_at = models.DateTimeField('Дата обновления', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Категория'
+        verbose_name_plural = 'Категории'
+        ordering = ['order', 'name']
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def billboards_count(self):
+        """Количество билбордов в категории"""
+        return self.billboards.count()
+
 class Billboard(models.Model):
     """Модель билборда"""
     
@@ -37,6 +62,15 @@ class Billboard(models.Model):
     # Основная информация
     title = models.CharField('Название', max_length=200, help_text='Краткое название билборда')
     description = models.TextField('Описание', blank=True, help_text='Подробное описание')
+    
+    # Категория (ForeignKey)
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.CASCADE,
+        verbose_name='Категория',
+        related_name='billboards',
+        help_text='Тип рекламной конструкции'
+    )
     
     # Ответственный сотрудник
     employee = models.ForeignKey(
@@ -107,7 +141,7 @@ class Billboard(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Билборд #{self.id} - {self.title}"
+        return f"{self.category.name} #{self.id} - {self.title}"
 
     @property
     def size_display(self):
@@ -127,11 +161,8 @@ class Billboard(models.Model):
     @property
     def days_until_expiry(self):
         """Количество дней до истечения аренды"""
-        if self.end_date is None:
-            return None  # или 0, если хотите по-другому обрабатывать пустое значение
         delta = self.end_date - timezone.now().date()
-        return max(delta.days, 0)
-
+        return delta.days if delta.days > 0 else 0
 
 def billboard_image_upload_path(instance, filename):
     """Путь для загрузки изображений билбордов"""
