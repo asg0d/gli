@@ -143,7 +143,9 @@ class Billboard(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.category.name} #{self.id} - {self.title}"
+        category_name = self.category.name if self.category else "Без категории"
+        return f"{category_name} #{self.id} - {self.title}"
+
 
     @property
     def size_display(self):
