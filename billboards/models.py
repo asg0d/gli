@@ -1,6 +1,8 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
+from django.utils import timezone
+
 
 class Employee(models.Model):
     """Модель сотрудника, ответственного за билборд"""
@@ -164,9 +166,10 @@ class Billboard(models.Model):
 
     @property
     def days_until_expiry(self):
-        """Количество дней до истечения аренды"""
+        if self.end_date is None:
+            return f"Дата не указана"  # или можно вернуть 0, или строку "Дата не указана"
         delta = self.end_date - timezone.now().date()
-        return delta.days if delta.days > 0 else 0
+        return delta.days
 
 def billboard_image_upload_path(instance, filename):
     """Путь для загрузки изображений билбордов"""
