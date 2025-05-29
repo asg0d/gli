@@ -156,11 +156,12 @@ class BillboardAdmin(admin.ModelAdmin):
     )
 
     def category_badge(self, obj):
+        color = obj.category.color if obj.category else "#000000"  # например, черный
+        name = obj.category.name if obj.category else "Без категории"
         return format_html(
-            '<span style="background-color: {}; color: white; padding: 3px 8px; '
-            'border-radius: 12px; font-size: 11px; font-weight: bold;">{}</span>',
-            obj.category.color,
-            obj.category.name,
+            '<span style="color:{};">{}</span>',
+            color,
+            name,
         )
 
     category_badge.short_description = "Категория"
