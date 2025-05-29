@@ -249,9 +249,8 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
                         <button
                           key={idx}
                           onClick={() => setCurrentImageIndex(idx)}
-                          className={`w-2 h-2 rounded-full transition-colors ${
-                            idx === currentImageIndex ? "bg-white" : "bg-white/50"
-                          }`}
+                          className={`w-2 h-2 rounded-full transition-colors ${idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                            }`}
                         />
                       ))}
                     </div>
@@ -461,9 +460,8 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                               <button
                                 key={idx}
                                 onClick={() => setCurrentImageIndex(idx)}
-                                className={`w-2 h-2 rounded-full transition-colors ${
-                                  idx === currentImageIndex ? "bg-white" : "bg-white/50"
-                                }`}
+                                className={`w-2 h-2 rounded-full transition-colors ${idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                                  }`}
                               />
                             ))}
                           </div>
