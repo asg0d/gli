@@ -145,7 +145,7 @@ export default function Dashboard() {
         if (mockCategories.length > 0) {
           setActiveCategory(mockCategories[0].slug)
         } else {
-           loadBillboards("") // Or some default behavior for mock
+          loadBillboards("") // Or some default behavior for mock
         }
       } catch (mockError) {
         setError("Не удалось загрузить демонстрационные категории")
@@ -251,7 +251,7 @@ export default function Dashboard() {
               ))}
             </Tabs>
           ) : (
-             !isLoading && ( // Show this only if not loading and no categories
+            !isLoading && ( // Show this only if not loading and no categories
               <div className="text-center py-16">
                 <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">Категории не найдены</h3>
@@ -264,7 +264,7 @@ export default function Dashboard() {
 
       {/* Billboard Detail Modal */}
       <BillboardModal billboard={selectedBillboard} onClose={closeBillboardModal} />
-      
+
       {/* Scroll Toggle Button */}
       <ScrollToggleButton />
     </div>
@@ -312,7 +312,7 @@ function CategoryContent({
             <p className="text-amber-700 text-sm">{error || "Показаны демонстрационные данные."}</p>
           </div>
         </motion.div>
-      ) : null }
+      ) : null}
 
 
       {isLoading ? (
@@ -648,7 +648,7 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
       default: return <Monitor className="h-6 w-6" />;
     }
   }
-  
+
   const currentImage =
     billboard.images && billboard.images.length > 0
       ? billboard.images[currentImageIndex]
@@ -749,7 +749,7 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                   <div className="aspect-[4/3] md:aspect-square rounded-2xl overflow-hidden bg-gray-100 shadow-lg">
                     {billboard.location && billboard.location.lat && billboard.location.lng ? (
                       <iframe
-                        src={`https://yandex.ru/map-widget/v1/?ll=${billboard.location.lng}%2C${billboard.location.lat}&mode=search&ol=geo&ouri=ymapsbm1%3A%2F%2Fgeo%3Fll%3D${billboard.location.lng}%2C${billboard.location.lat}%26spn%3D0.001%2C0.001&z=17&pt=${billboard.location.lng},${billboard.location.lat},pm2rdm`}
+                        src={`https://yandex.ru/map-widget/v1/?ll=${billboard.location.lng}%2C${billboard.location.lat}&mode=map&l=sat&ol=geo&ouri=ymapsbm1%3A%2F%2Fgeo%3Fll%3D${billboard.location.lng}%2C${billboard.location.lat}%26spn%3D0.001%2C0.001&z=17&pt=${billboard.location.lng},${billboard.location.lat},pm2rdm`}
                         width="100%"
                         height="100%"
                         style={{ border: 0 }}
@@ -759,9 +759,9 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                         title={`Яндекс карта расположения ${billboardName}`}
                       />
                     ) : (
-                       <div className="w-full h-full flex items-center justify-center text-gray-500">
-                         Карта недоступна
-                       </div>
+                      <div className="w-full h-full flex items-center justify-center text-gray-500">
+                        Карта недоступна
+                      </div>
                     )}
                   </div>
                 </div>
