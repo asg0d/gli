@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.utils.safestring import mark_safe
-from .models import Employee, Category, Billboard, BillboardImage, Contractor
+from .models import Contractor, Employee, Category, Billboard, BillboardImage
 
 
 @admin.register(Employee)
@@ -228,11 +228,13 @@ class BillboardAdmin(admin.ModelAdmin):
     category_badge.short_description = "Категория"
 
     def contractor_info(self, obj):
-        return format_html(
-            "<div><strong>{}</strong><br><small>{}</small></div>",
-            obj.contractor.name,
-            obj.contractor.display_contact,
-        )
+        if obj.contractor:
+            return format_html(
+                "<div><strong>{}</strong><br><small>{}</small></div>",
+                obj.contractor.name,
+                obj.contractor.display_contact,
+            )
+        return format_html("<span style='color: #888;'>Нет подрядчика</span>")
 
     contractor_info.short_description = "Контрагент"
 
