@@ -152,7 +152,7 @@ class Billboard(models.Model):
     @property
     def size_display(self):
         """Отображение размера в формате 'ШxВ м'"""
-        return f"{self.width}x{self.height} м"
+        return f"{self.height}x{self.width} м"
 
     @property
     def period_display(self):
