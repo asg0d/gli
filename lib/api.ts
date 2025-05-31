@@ -493,7 +493,7 @@ class ApiService {
           lng: Number.parseFloat(billboard.longitude) || 0,
         },
         employee: billboard.employee_name || billboard.employee || "Не указан",
-        size: billboard.size || `${billboard.width || 0}x${billboard.height || 0} м`,
+        size: billboard.size || `${billboard.height || 0}x${billboard.width || 0} м`,
         period: billboard.period || `${billboard.start_date || ""} – ${billboard.end_date || ""}`,
         price: billboard.price ? `${billboard.price} сум` : undefined,
       }
