@@ -13,13 +13,19 @@ import {
   Maximize2,
   ChevronLeft,
   ChevronRight,
-  ChevronUp, // Added
-  ChevronDown, // Added
   X,
   RefreshCw,
   AlertCircle,
   Monitor,
   Bus,
+  Wifi,
+  WifiOff,
+  Loader2,
+  ChevronDown,
+  Building2,
+  Phone,
+  Mail,
+  FileText,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -27,90 +33,21 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { apiService, type Billboard, type Category } from "@/lib/api"
 
-// New ScrollToggleButton Component
-function ScrollToggleButton() {
-  const [isVisible, setIsVisible] = useState(false)
-  // isAtTop means the current scroll position is very close to the top of the page
-  const [isAtTop, setIsAtTop] = useState(true)
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const showButtonThreshold = 200 // Show button after scrolling 200px
-      const atTopThreshold = 50    // Consider "at top" if scrollY < 50px
-
-      if (window.scrollY > showButtonThreshold) {
-        setIsVisible(true)
-      } else {
-        setIsVisible(false)
-      }
-
-      if (window.scrollY < atTopThreshold) {
-        setIsAtTop(true)
-      } else {
-        setIsAtTop(false)
-      }
-    }
-
-    window.addEventListener("scroll", handleScroll)
-    handleScroll() // Initial check in case page is already scrolled (e.g. on refresh)
-
-    return () => {
-      window.removeEventListener("scroll", handleScroll)
-    }
-  }, [])
-
-  const scrollToTop = () => {
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    })
-  }
-
-  const scrollToBottom = () => {
-    window.scrollTo({
-      top: document.documentElement.scrollHeight,
-      behavior: "smooth",
-    })
-  }
-
-  const handleButtonClick = () => {
-    if (isAtTop) {
-      // If at the top, scroll to bottom
-      scrollToBottom()
-    } else {
-      // If not at the top (i.e., somewhere below), scroll to top
-      scrollToTop()
-    }
-  }
-
-  if (!isVisible) {
-    return null
-  }
-
-  return (
-    <Button
-      onClick={handleButtonClick}
-      variant="outline"
-      size="icon"
-      className="fixed bottom-[60px] right-[60px] z-30 h-12 w-12 rounded-full shadow-lg bg-white hover:bg-gray-100 border-gray-300"
-      aria-label={isAtTop ? "Scroll to bottom" : "Scroll to top"}
-    >
-      {isAtTop ? <ChevronDown className="h-6 w-6" /> : <ChevronUp className="h-6 w-6" />}
-    </Button>
-  )
-}
-
+// Обновляем компонент Dashboard
 export default function Dashboard() {
   const [billboards, setBillboards] = useState<Billboard[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedBillboard, setSelectedBillboard] = useState<Billboard | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isUsingMockData, setIsUsingMockData] = useState(false)
   const [activeCategory, setActiveCategory] = useState<string>("")
+  const [apiStatus, setApiStatus] = useState<{ status: string; message: string } | null>(null)
+  const [nextPage, setNextPage] = useState<number | null>(null)
+  const [totalCount, setTotalCount] = useState<number>(0)
 
   useEffect(() => {
-    loadInitialData()
+    loadDataFromApi()
   }, [])
 
   useEffect(() => {
@@ -119,55 +56,105 @@ export default function Dashboard() {
     }
   }, [activeCategory])
 
-  const loadInitialData = async () => {
+  const loadDataFromApi = async () => {
     try {
       setIsLoading(true)
       setError(null)
-      setIsUsingMockData(false)
 
+      console.log("🚀 Начинаем загрузку данных...")
+
+      // Проверяем доступность API
+      const healthCheck = await apiService.checkApiHealth()
+      setApiStatus(healthCheck)
+
+      // Загружаем категории (теперь с fallback на mock данные)
       const categoriesData = await apiService.getCategories()
-      setCategories(categoriesData)
 
+      if (!categoriesData || categoriesData.length === 0) {
+        throw new Error("Не удалось получить категории")
+      }
+
+      setCategories(categoriesData)
+      console.log("📂 Категории загружены:", categoriesData)
+
+      // Устанавливаем первую категорию как активную
       if (categoriesData.length > 0) {
         setActiveCategory(categoriesData[0].slug)
+      }
+
+      // Если API недоступен, показываем предупреждение, но не ошибку
+      if (healthCheck.status === "error") {
+        setError("API недоступен, отображаются демонстрационные данные")
       } else {
-        // If no categories, load billboards without category filter or handle appropriately
-        loadBillboards("") // Or some default behavior
+        setError(null)
       }
     } catch (error) {
-      console.error("Failed to load initial data:", error)
-      setError("Сервер недоступен. Показаны демонстрационные данные.")
-      setIsUsingMockData(true)
+      console.error("❌ Ошибка загрузки данных:", error)
+      setError(`Ошибка: ${error}`)
+      setApiStatus({ status: "error", message: String(error) })
 
+      // Даже при ошибке пытаемся загрузить mock данные
       try {
-        const mockCategories = await apiService.getCategories() // Assuming mock data source
+        const mockCategories = await apiService.getCategories()
         setCategories(mockCategories)
         if (mockCategories.length > 0) {
           setActiveCategory(mockCategories[0].slug)
-        } else {
-          loadBillboards("") // Or some default behavior for mock
         }
       } catch (mockError) {
-        setError("Не удалось загрузить демонстрационные категории")
+        console.error("❌ Не удалось загрузить даже mock данные:", mockError)
       }
     } finally {
       setIsLoading(false)
     }
   }
 
-  const loadBillboards = async (categorySlug: string) => {
+  const loadBillboards = async (categorySlug: string, page = 1) => {
     try {
-      setIsLoading(true)
-      const data = await apiService.getBillboards({ category: categorySlug })
-      setBillboards(data)
-      console.log("Loaded billboards for category:", categorySlug, data)
+      if (page === 1) {
+        setIsLoading(true)
+        setBillboards([]) // Очищаем список при загрузке первой страницы
+      } else {
+        setIsLoadingMore(true)
+      }
+
+      console.log(`📋 Загружаем билборды для категории: ${categorySlug}, страница: ${page}`)
+
+      const {
+        billboards: data,
+        nextPage: next,
+        totalCount: count,
+      } = await apiService.getBillboards({
+        category: categorySlug,
+        page: page,
+      })
+
+      if (page === 1) {
+        setBillboards(data)
+      } else {
+        setBillboards((prev) => [...prev, ...data])
+      }
+
+      setNextPage(next)
+      setTotalCount(count)
+
+      console.log(
+        `✅ Успешно загружено ${data.length} билбордов для категории ${categorySlug}. Всего: ${count}, следующая страница: ${next}`,
+      )
     } catch (error) {
-      console.error("Failed to load billboards:", error)
-      setError("Не удалось загрузить билборды")
-      // Optionally set billboards to an empty array or mock data for billboards here
-      // setBillboards(apiService.getMockBillboards(categorySlug));
+      console.error("❌ Ошибка загрузки билбордов:", error)
+      setError(`Не удалось загрузить билборды: ${error}`)
+      if (page === 1) {
+        setBillboards([])
+      }
     } finally {
       setIsLoading(false)
+      setIsLoadingMore(false)
+    }
+  }
+
+  const loadMoreBillboards = () => {
+    if (nextPage && activeCategory) {
+      loadBillboards(activeCategory, nextPage)
     }
   }
 
@@ -181,6 +168,11 @@ export default function Dashboard() {
 
   const handleCategoryChange = (categorySlug: string) => {
     setActiveCategory(categorySlug)
+  }
+
+  const handleRefresh = () => {
+    console.log("🔄 Принудительное обновление данных...")
+    loadDataFromApi()
   }
 
   const getIconComponent = (iconName?: string) => {
@@ -198,8 +190,26 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Загрузка...</p>
+          <Loader2 className="h-16 w-16 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600 text-lg">Загрузка данных с API...</p>
+          <p className="text-sm text-gray-500 mt-2">api.location.utu-ranch.uz</p>
+          {apiStatus && <p className="text-xs text-gray-400 mt-1">Статус: {apiStatus.message}</p>}
+        </div>
+      </div>
+    )
+  }
+
+  if (error && categories.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <WifiOff className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Ошибка подключения к API</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={handleRefresh} className="flex items-center space-x-2">
+            <RefreshCw className="h-4 w-4" />
+            <span>Попробовать снова</span>
+          </Button>
         </div>
       </div>
     )
@@ -213,22 +223,63 @@ export default function Dashboard() {
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-3xl font-bold mb-2">Рекламные конструкции</h2>
-              <p className="text-gray-600">Управление билбордами и рекламой на остановках</p>
+              <p className="text-gray-600">Данные загружены с реального API</p>
+
+              {/* API Status */}
+              <div className="flex items-center space-x-2 mt-2">
+                {apiStatus?.status === "ok" ? (
+                  <div className="flex items-center space-x-1 text-green-600">
+                    <Wifi className="h-4 w-4" />
+                    <span className="text-sm font-medium">API подключен</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-1 text-red-600">
+                    <WifiOff className="h-4 w-4" />
+                    <span className="text-sm font-medium">API недоступен</span>
+                  </div>
+                )}
+                <span className="text-xs text-gray-500">api.location.utu-ranch.uz</span>
+              </div>
             </div>
-            <Button
-              onClick={() => activeCategory && loadBillboards(activeCategory)}
-              variant="outline"
-              className="flex items-center space-x-2"
-            >
+            <Button onClick={handleRefresh} variant="outline" className="flex items-center space-x-2">
               <RefreshCw className="h-4 w-4" />
               <span>Обновить</span>
             </Button>
           </div>
 
+          {/* API Status and Messages */}
+          {apiStatus?.status === "ok" && !error && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center space-x-3"
+            >
+              <Wifi className="h-5 w-5 text-green-600 flex-shrink-0" />
+              <div>
+                <p className="text-green-800 font-medium">Подключено к реальному API</p>
+                <p className="text-green-700 text-sm">Все данные загружены с сервера в реальном времени</p>
+              </div>
+            </motion.div>
+          )}
+
+          {apiStatus?.status === "error" && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center space-x-3"
+            >
+              <WifiOff className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+              <div>
+                <p className="text-yellow-800 font-medium">API недоступен</p>
+                <p className="text-yellow-700 text-sm">Отображаются демонстрационные данные. {apiStatus.message}</p>
+              </div>
+            </motion.div>
+          )}
+
           {/* Category Tabs */}
-          {categories.length > 0 ? (
+          {categories.length > 0 && (
             <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
-              <TabsList className="grid w-full max-w-md grid-cols-2"> {/* Adjusted for potentially fewer categories */}
+              <TabsList className="grid w-full grid-cols-3 gap-2">
                 {categories.map((category) => (
                   <TabsTrigger key={category.slug} value={category.slug} className="flex items-center space-x-2">
                     {getIconComponent(category.icon)}
@@ -242,51 +293,51 @@ export default function Dashboard() {
                   <CategoryContent
                     category={category}
                     billboards={billboards}
-                    isLoading={isLoading && activeCategory === category.slug} // Only show loading for active tab's content
-                    error={error} // Pass error state
-                    isUsingMockData={isUsingMockData} // Pass mock data state
+                    isLoading={isLoading}
+                    isLoadingMore={isLoadingMore}
+                    error={error}
                     onBillboardClick={openBillboardModal}
+                    onLoadMore={loadMoreBillboards}
+                    hasMore={nextPage !== null}
+                    totalCount={totalCount}
                   />
                 </TabsContent>
               ))}
             </Tabs>
-          ) : (
-            !isLoading && ( // Show this only if not loading and no categories
-              <div className="text-center py-16">
-                <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Категории не найдены</h3>
-                <p className="text-gray-600">{error || "Не удалось загрузить данные категорий."}</p>
-              </div>
-            )
           )}
         </motion.div>
       </section>
 
       {/* Billboard Detail Modal */}
       <BillboardModal billboard={selectedBillboard} onClose={closeBillboardModal} />
-
-      {/* Scroll Toggle Button */}
-      <ScrollToggleButton />
     </div>
   )
 }
 
+// Обновляем интерфейс CategoryContentProps
 interface CategoryContentProps {
   category: Category
   billboards: Billboard[]
   isLoading: boolean
+  isLoadingMore: boolean
   error: string | null
-  isUsingMockData: boolean
   onBillboardClick: (billboard: Billboard) => void
+  onLoadMore: () => void
+  hasMore: boolean
+  totalCount: number
 }
 
+// Обновляем компонент CategoryContent
 function CategoryContent({
   category,
   billboards,
   isLoading,
+  isLoadingMore,
   error,
-  isUsingMockData,
   onBillboardClick,
+  onLoadMore,
+  hasMore,
+  totalCount,
 }: CategoryContentProps) {
   return (
     <div>
@@ -295,74 +346,95 @@ function CategoryContent({
           {category.name}
         </h3>
         <p className="text-gray-600">{category.description}</p>
+        <p className="text-sm text-gray-500 mt-1">
+          Загружено с API • Показано: {billboards.length} из {totalCount}
+        </p>
       </div>
 
-      {/* Error/Mock Data Warning - Shown if there's a general error or using mock data */}
-      {(error && billboards.length === 0 && !isLoading) || (isUsingMockData && billboards.length === 0 && !isLoading) ? (
+      {/* Error Message */}
+      {error && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center space-x-3"
+          className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3"
         >
-          <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
           <div>
-            <p className="text-amber-800 font-medium">
-              {isUsingMockData ? "Демонстрационный режим" : "Предупреждение"}
-            </p>
-            <p className="text-amber-700 text-sm">{error || "Показаны демонстрационные данные."}</p>
+            <p className="text-red-800 font-medium">Ошибка загрузки</p>
+            <p className="text-red-700 text-sm">{error}</p>
           </div>
         </motion.div>
-      ) : null}
-
+      )}
 
       {isLoading ? (
         <div className="text-center py-16">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Загрузка {category.name.toLowerCase()}...</p>
+          <Loader2 className="h-16 w-16 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Загрузка {category.name.toLowerCase()} с API...</p>
         </div>
       ) : billboards.length === 0 ? (
         <div className="text-center py-16">
           <div className="text-gray-400 text-6xl mb-4">{category.icon === "bus" ? "🚌" : "📋"}</div>
           <h3 className="text-xl font-semibold text-gray-900 mb-2">Нет {category.name.toLowerCase()}</h3>
-          <p className="text-gray-600">Данные не найдены или еще не добавлены для этой категории.</p>
+          <p className="text-gray-600">API не вернул данные для этой категории или они еще не добавлены</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {billboards.map((billboard, index) => (
-            <BillboardCard
-              key={billboard.id}
-              billboard={billboard}
-              index={index}
-              onDetailsClick={() => onBillboardClick(billboard)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {billboards.map((billboard, index) => (
+              <BillboardCard
+                key={billboard.id}
+                billboard={billboard}
+                index={index}
+                onDetailsClick={() => onBillboardClick(billboard)}
+              />
+            ))}
+          </div>
+
+          {/* Load More Button */}
+          {hasMore && (
+            <div className="mt-10 text-center">
+              <Button
+                onClick={onLoadMore}
+                disabled={isLoadingMore}
+                variant="outline"
+                size="lg"
+                className="px-8 py-6 text-lg"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    Загрузка...
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-5 w-5 mr-2" />
+                    Загрузить еще
+                  </>
+                )}
+              </Button>
+              <p className="text-sm text-gray-500 mt-2">
+                Показано {billboards.length} из {totalCount}
+              </p>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
 }
 
-// Функция для получения названия билборда из любого возможного поля
+// Функция для получения названия билборда
 function getBillboardName(billboard: Billboard): string {
-  // Safety check for billboard object
   if (!billboard) {
     return "Неизвестная конструкция"
   }
 
-  // Проверяем все возможные поля для названия
-  const possibleNameFields = ["title", "name", "billboard_name", "display_name", "label"]
-
-  for (const field of possibleNameFields) {
-    // Ensure the field exists and is a non-empty string
-    if (billboard[field as keyof Billboard] && typeof billboard[field as keyof Billboard] === "string" && (billboard[field as keyof Billboard] as string).trim()) {
-      return (billboard[field as keyof Billboard] as string).trim()
-    }
+  if (billboard.title && billboard.title.trim()) {
+    return billboard.title.trim()
   }
 
-  // Если ничего не найдено, показываем название категории + ID
   const categoryName = billboard.category_data?.name || "Рекламная конструкция"
-  const billboardId = billboard.id || "Unknown"
-  return `${categoryName} #${billboardId}`
+  return `${categoryName} #${billboard.id}`
 }
 
 interface BillboardCardProps {
@@ -417,7 +489,7 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
     setCurrentImageIndex(index)
   }
 
-  const getStatusColor = (status?: string) => { // Made status optional
+  const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
         return "bg-green-100 text-green-800"
@@ -432,7 +504,7 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
     }
   }
 
-  const getStatusText = (status?: string) => { // Made status optional
+  const getStatusText = (status: string) => {
     switch (status) {
       case "active":
         return "Активен"
@@ -447,7 +519,7 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
     }
   }
 
-  const getCardIconComponent = (iconName?: string) => { // Renamed to avoid conflict
+  const getIconComponent = (iconName?: string) => {
     switch (iconName) {
       case "monitor":
         return <Monitor className="h-4 w-4" />
@@ -461,7 +533,7 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
   const currentImage =
     billboard.images && billboard.images.length > 0
       ? billboard.images[currentImageIndex]
-      : "/placeholder.svg?height=400&width=600" // Ensure placeholder exists in /public
+      : "/placeholder.svg?height=400&width=600"
 
   const billboardName = getBillboardName(billboard)
 
@@ -478,7 +550,6 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
                   alt={`${billboardName} - фото ${currentImageIndex + 1}`}
                   fill
                   className="object-cover"
-                  priority={index < 2} // Prioritize loading for first few images
                 />
 
                 {/* Category Badge */}
@@ -486,8 +557,13 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
                   className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm rounded-full px-3 py-1 flex items-center space-x-1"
                   style={{ borderLeft: `3px solid ${billboard.category_data?.color || "#3b82f6"}` }}
                 >
-                  {getCardIconComponent(billboard.category_data?.icon)}
+                  {getIconComponent(billboard.category_data?.icon)}
                   <span className="text-xs font-medium">{billboard.category_data?.name || "Реклама"}</span>
+                </div>
+
+                {/* API Badge */}
+                <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full px-2 py-1">
+                  <span className="text-xs font-medium">API</span>
                 </div>
 
                 {/* Image Navigation */}
@@ -531,6 +607,26 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
                 </div>
 
                 <div className="space-y-3">
+                  {/* Contractor Info */}
+                  {billboard.contractor_data && (
+                    <div className="bg-blue-50 rounded-lg p-3 border-l-4 border-blue-400">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <Building2 className="h-4 w-4 text-blue-600" />
+                        <span className="text-sm font-medium text-blue-800">Контрагент</span>
+                      </div>
+                      <p className="font-semibold text-blue-900">{billboard.contractor_data.name}</p>
+                      {billboard.contractor_data.contact_person && (
+                        <p className="text-sm text-blue-700">{billboard.contractor_data.contact_person}</p>
+                      )}
+                      {billboard.contractor_data.phone && (
+                        <div className="flex items-center space-x-1 mt-1">
+                          <Phone className="h-3 w-3 text-blue-600" />
+                          <span className="text-xs text-blue-600">{billboard.contractor_data.phone}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex items-center space-x-3">
                     <User className="h-5 w-5 text-gray-500" />
                     <div>
@@ -542,7 +638,7 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
                   <div className="flex items-center space-x-3">
                     <Maximize2 className="h-5 w-5 text-gray-500" />
                     <div>
-                      <p className="text-sm text-gray-500">Размер</p>
+                      <p className="text-sm text-gray-500">Размер (ШxВ)</p>
                       <p className="font-medium">{billboard.size || "Не указан"}</p>
                     </div>
                   </div>
@@ -589,7 +685,7 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
   useEffect(() => {
     if (billboard) {
       document.body.style.overflow = "hidden"
-      setCurrentImageIndex(0) // Reset image index when new billboard is selected
+      setCurrentImageIndex(0)
     } else {
       document.body.style.overflow = "unset"
     }
@@ -620,39 +716,51 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
     setCurrentImageIndex(index)
   }
 
-  // Re-using functions from BillboardCard, ensure consistency or abstract them
-  const getModalStatusColor = (status?: string) => { // Made status optional
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case "active": return "bg-green-100 text-green-800";
-      case "pending": return "bg-yellow-100 text-yellow-800";
-      case "expired": return "bg-red-100 text-red-800";
-      case "maintenance": return "bg-blue-100 text-blue-800";
-      default: return "bg-gray-100 text-gray-800";
+      case "active":
+        return "bg-green-100 text-green-800"
+      case "pending":
+        return "bg-yellow-100 text-yellow-800"
+      case "expired":
+        return "bg-red-100 text-red-800"
+      case "maintenance":
+        return "bg-blue-100 text-blue-800"
+      default:
+        return "bg-gray-100 text-gray-800"
     }
   }
 
-  const getModalStatusText = (status?: string) => { // Made status optional
+  const getStatusText = (status: string) => {
     switch (status) {
-      case "active": return "Активен";
-      case "pending": return "Ожидание";
-      case "expired": return "Истёк";
-      case "maintenance": return "Обслуживание";
-      default: return "Неизвестно";
+      case "active":
+        return "Активен"
+      case "pending":
+        return "Ожидание"
+      case "expired":
+        return "Истёк"
+      case "maintenance":
+        return "Обслуживание"
+      default:
+        return "Неизвестно"
     }
   }
 
-  const getModalIconComponent = (iconName?: string) => { // Renamed to avoid conflict
+  const getIconComponent = (iconName?: string) => {
     switch (iconName) {
-      case "monitor": return <Monitor className="h-6 w-6" />;
-      case "bus": return <Bus className="h-6 w-6" />;
-      default: return <Monitor className="h-6 w-6" />;
+      case "monitor":
+        return <Monitor className="h-6 w-6" />
+      case "bus":
+        return <Bus className="h-6 w-6" />
+      default:
+        return <Monitor className="h-6 w-6" />
     }
   }
 
   const currentImage =
     billboard.images && billboard.images.length > 0
       ? billboard.images[currentImageIndex]
-      : "/placeholder.svg?height=600&width=800" // Ensure placeholder exists
+      : "/placeholder.svg?height=400&width=600"
 
   const billboardName = getBillboardName(billboard)
 
@@ -677,11 +785,11 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
             className="fixed inset-0 bg-white z-50 overflow-y-auto"
           >
-            <div className="min-h-full p-6 pb-16"> {/* Added pb-16 for bottom padding */}
+            <div className="min-h-full p-6">
               {/* Close Button */}
               <button
                 onClick={onClose}
-                className="fixed top-4 right-4 p-3 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors z-[51]" // Ensure button is above content
+                className="fixed top-4 right-4 p-3 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors z-10"
               >
                 <X className="h-6 w-6" />
               </button>
@@ -689,23 +797,72 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
               {/* Content */}
               <div className="max-w-6xl mx-auto space-y-8 pt-16">
                 {/* Header */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
                     <div style={{ color: billboard.category_data?.color || "#3b82f6" }}>
-                      {getModalIconComponent(billboard.category_data?.icon)}
+                      {getIconComponent(billboard.category_data?.icon)}
                     </div>
-                    <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold">{billboardName}</h1>
+                    <h1 className="text-3xl md:text-4xl font-bold">{billboardName}</h1>
+                    <Badge className="bg-green-100 text-green-800">Загружено с API</Badge>
                   </div>
-                  <Badge className={`${getModalStatusColor(billboard.status)} text-base md:text-lg px-3 py-1.5 md:px-4 md:py-2 whitespace-nowrap`}>
-                    {getModalStatusText(billboard.status)}
+                  <Badge className={`${getStatusColor(billboard.status)} text-lg px-4 py-2`}>
+                    {getStatusText(billboard.status)}
                   </Badge>
                 </div>
+
+                {/* Contractor Card */}
+                {billboard.contractor_data && (
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6">
+                    <div className="flex items-start space-x-4">
+                      <div className="bg-blue-100 p-3 rounded-full">
+                        <Building2 className="h-8 w-8 text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-2xl font-bold text-blue-900 mb-2">{billboard.contractor_data.name}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {billboard.contractor_data.contact_person && (
+                            <div className="flex items-center space-x-2">
+                              <User className="h-4 w-4 text-blue-600" />
+                              <span className="text-blue-800">{billboard.contractor_data.contact_person}</span>
+                            </div>
+                          )}
+                          {billboard.contractor_data.phone && (
+                            <div className="flex items-center space-x-2">
+                              <Phone className="h-4 w-4 text-blue-600" />
+                              <span className="text-blue-800">{billboard.contractor_data.phone}</span>
+                            </div>
+                          )}
+                          {billboard.contractor_data.email && (
+                            <div className="flex items-center space-x-2">
+                              <Mail className="h-4 w-4 text-blue-600" />
+                              <span className="text-blue-800">{billboard.contractor_data.email}</span>
+                            </div>
+                          )}
+                          {billboard.contractor_data.contract_number && (
+                            <div className="flex items-center space-x-2">
+                              <FileText className="h-4 w-4 text-blue-600" />
+                              <span className="text-blue-800">
+                                Договор: {billboard.contractor_data.contract_number}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {billboard.contractor_data.address && (
+                          <div className="mt-3 flex items-start space-x-2">
+                            <MapPin className="h-4 w-4 text-blue-600 mt-0.5" />
+                            <span className="text-blue-800">{billboard.contractor_data.address}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Images and Map Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Images */}
                   <div className="relative">
-                    <div className="relative aspect-[4/3] md:aspect-square rounded-2xl overflow-hidden shadow-lg">
+                    <div className="relative aspect-square rounded-3xl overflow-hidden shadow-lg">
                       <Image
                         src={currentImage || "/placeholder.svg"}
                         alt={`${billboardName} - фото ${currentImageIndex + 1}`}
@@ -718,24 +875,24 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                         <>
                           <button
                             onClick={prevImage}
-                            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 sm:p-3 rounded-full transition-colors"
+                            className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full transition-colors"
                           >
-                            <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+                            <ChevronLeft className="h-5 w-5" />
                           </button>
                           <button
                             onClick={nextImage}
-                            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 sm:p-3 rounded-full transition-colors"
+                            className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full transition-colors"
                           >
-                            <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
+                            <ChevronRight className="h-5 w-5" />
                           </button>
 
                           {/* Image Indicators */}
-                          <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 flex space-x-1.5 sm:space-x-2">
+                          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2">
                             {billboard.images.map((_, idx) => (
                               <button
                                 key={idx}
                                 onClick={(e) => setImageIndex(e, idx)}
-                                className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full transition-colors ${idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                                className={`w-3 h-3 rounded-full transition-colors ${idx === currentImageIndex ? "bg-white" : "bg-white/50"
                                   }`}
                               />
                             ))}
@@ -746,10 +903,10 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                   </div>
 
                   {/* Yandex Map */}
-                  <div className="aspect-[4/3] md:aspect-square rounded-2xl overflow-hidden bg-gray-100 shadow-lg">
-                    {billboard.location && billboard.location.lat && billboard.location.lng ? (
+                  <div className="aspect-square rounded-3xl overflow-hidden bg-gray-100 shadow-lg">
+                    {billboard.location && (
                       <iframe
-                        src={`https://yandex.ru/map-widget/v1/?ll=${billboard.location.lng}%2C${billboard.location.lat}&mode=map&l=sat&ol=geo&ouri=ymapsbm1%3A%2F%2Fgeo%3Fll%3D${billboard.location.lng}%2C${billboard.location.lat}%26spn%3D0.001%2C0.001&z=17&pt=${billboard.location.lng},${billboard.location.lat},pm2rdm`}
+                        src={`https://yandex.ru/map-widget/v1/?ll=${billboard.location.lng}%2C${billboard.location.lat}&mode=search&ol=geo&ouri=ymapsbm1%3A%2F%2Fgeo%3Fdata%3DCgg1NjE1NzQwNhI%2F0KPQt9Cx0LXQutC40YHRgtCw0L0sINCi0LDRiNC60LXQvdGCLCDQvtC70LjQvNC%2F0LjQudGB0LrQuNC5INCy0LjQu9C%2B0Y%2FRgtGCIkEKBQAAAEAQBQAAAEAaJAoSCZOJhEBdUUFAEYOJhEBdUUFAEhIJk4mEQF1RQUARg4mEQF1RQUA%3D&z=16&pt=${billboard.location.lng},${billboard.location.lat},pm2rdm`}
                         width="100%"
                         height="100%"
                         style={{ border: 0 }}
@@ -758,35 +915,58 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                         referrerPolicy="no-referrer-when-downgrade"
                         title={`Яндекс карта расположения ${billboardName}`}
                       />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-500">
-                        Карта недоступна
-                      </div>
                     )}
                   </div>
                 </div>
 
                 {/* Info Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <InfoCard icon={<User className="h-5 w-5 text-gray-500" />} label="Ответственный" value={billboard.employee} />
-                  <InfoCard icon={<Maximize2 className="h-5 w-5 text-gray-500" />} label="Размер" value={billboard.size} />
-                  <InfoCard icon={<MapPin className="h-5 w-5 text-gray-500" />} label="Адрес" value={billboard.address} />
-                  <InfoCard icon={<Calendar className="h-5 w-5 text-gray-500" />} label="Период аренды" value={billboard.period} />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                  <div className="bg-gray-50 rounded-2xl p-6">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <User className="h-6 w-6 text-gray-500" />
+                      <p className="text-sm text-gray-500 font-medium">Ответственный</p>
+                    </div>
+                    <p className="text-lg font-semibold">{billboard.employee || "Не указан"}</p>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-2xl p-6">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <Maximize2 className="h-6 w-6 text-gray-500" />
+                      <p className="text-sm text-gray-500 font-medium">Размер (ШxВ)</p>
+                    </div>
+                    <p className="text-lg font-semibold">{billboard.size || "Не указан"}</p>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-2xl p-6">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <MapPin className="h-6 w-6 text-gray-500" />
+                      <p className="text-sm text-gray-500 font-medium">Адрес</p>
+                    </div>
+                    <p className="text-lg font-semibold">{billboard.address || "Не указан"}</p>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-2xl p-6">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <Calendar className="h-6 w-6 text-gray-500" />
+                      <p className="text-sm text-gray-500 font-medium">Период аренды</p>
+                    </div>
+                    <p className="text-lg font-semibold">{billboard.period || "Не указан"}</p>
+                  </div>
                 </div>
 
                 {/* Description */}
                 {billboard.description && (
-                  <div className="bg-white border border-gray-200 rounded-xl p-6">
-                    <h3 className="text-xl font-semibold mb-3">Описание</h3>
-                    <p className="text-gray-700 text-base leading-relaxed whitespace-pre-wrap">{billboard.description}</p>
+                  <div className="bg-white border border-gray-200 rounded-2xl p-8">
+                    <h3 className="text-2xl font-semibold mb-4">Описание</h3>
+                    <p className="text-gray-600 text-lg leading-relaxed">{billboard.description}</p>
                   </div>
                 )}
 
                 {/* Price */}
                 {billboard.price && (
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6">
-                    <h3 className="text-lg font-semibold mb-1 text-green-700">Стоимость аренды</h3>
-                    <p className="text-2xl font-bold text-green-600">{billboard.price}</p>
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-8">
+                    <h3 className="text-xl font-semibold mb-2 text-green-800">Стоимость аренды</h3>
+                    <p className="text-3xl font-bold text-green-600">{billboard.price}</p>
                   </div>
                 )}
               </div>
@@ -796,22 +976,4 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
       )}
     </AnimatePresence>
   )
-}
-
-// Helper component for Info Cards in Modal
-interface InfoCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value?: string | number | null;
-}
-function InfoCard({ icon, label, value }: InfoCardProps) {
-  return (
-    <div className="bg-gray-50 rounded-xl p-4">
-      <div className="flex items-center space-x-2.5 mb-1.5">
-        {icon}
-        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">{label}</p>
-      </div>
-      <p className="text-base font-semibold text-gray-800">{value || "Не указан"}</p>
-    </div>
-  );
 }
