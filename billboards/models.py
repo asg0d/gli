@@ -107,7 +107,9 @@ class Billboard(models.Model):
         on_delete=models.CASCADE,
         verbose_name='Категория',
         related_name='billboards',
-        help_text='Тип рекламной конструкции'
+        help_text='Тип рекламной конструкции',
+        blank=True,
+        null=True,
     )
     
     # Контрагент (клиент)
