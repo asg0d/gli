@@ -379,7 +379,7 @@ function CategoryContent({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
             {billboards.map((billboard, index) => (
               <BillboardCard
                 key={billboard.id}
@@ -538,10 +538,10 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
   const billboardName = getBillboardName(billboard)
 
   return (
-    <motion.div ref={ref} initial="hidden" animate={controls} variants={variants}>
-      <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 bg-white">
-        <CardContent className="p-0">
-          <div className="flex flex-col md:flex-row">
+    <motion.div ref={ref} initial="hidden" animate={controls} variants={variants} className="h-full">
+      <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 bg-white h-full">
+        <CardContent className="p-0 h-full">
+          <div className="flex flex-col md:flex-row h-full">
             {/* Images Section */}
             <div className="md:w-1/2 relative">
               <div className="relative h-64 md:h-80">
@@ -599,69 +599,55 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
             </div>
 
             {/* Info Section */}
-            <div className="md:w-1/2 p-6 flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-bold text-gray-900">{billboardName}</h3>
-                  <Badge className={getStatusColor(billboard.status)}>{getStatusText(billboard.status)}</Badge>
+            <div className="md:w-1/2 p-6 flex flex-col justify-between h-full">
+              <div className="space-y-4 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-h-[3.5rem]">
+                    <h3 className="text-xl font-bold text-gray-900 line-clamp-2 leading-tight">{billboardName}</h3>
+                  </div>
+                  <Badge className={`${getStatusColor(billboard.status)} shrink-0 ml-2`}>
+                    {getStatusText(billboard.status)}
+                  </Badge>
                 </div>
 
-                <div className="space-y-3">
-                  {/* Contractor Info */}
-                  {billboard.contractor_data && (
-                    <div className="bg-blue-50 rounded-lg p-3 border-l-4 border-blue-400">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <Building2 className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm font-medium text-blue-800">Контрагент</span>
-                      </div>
-                      <p className="font-semibold text-blue-900">{billboard.contractor_data.name}</p>
-                      {billboard.contractor_data.contact_person && (
-                        <p className="text-sm text-blue-700">{billboard.contractor_data.contact_person}</p>
-                      )}
-                      {billboard.contractor_data.phone && (
-                        <div className="flex items-center space-x-1 mt-1">
-                          <Phone className="h-3 w-3 text-blue-600" />
-                          <span className="text-xs text-blue-600">{billboard.contractor_data.phone}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
+                <div className="space-y-3 flex-1">
                   <div className="flex items-center space-x-3">
-                    <User className="h-5 w-5 text-gray-500" />
-                    <div>
+                    <User className="h-5 w-5 text-gray-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm text-gray-500">Ответственный</p>
-                      <p className="font-medium">{billboard.employee || "Не указан"}</p>
+                      <p className="font-medium truncate">{billboard.employee || "Не указан"}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-3">
-                    <Maximize2 className="h-5 w-5 text-gray-500" />
-                    <div>
-                      <p className="text-sm text-gray-500">Размер (ШxВ)</p>
-                      <p className="font-medium">{billboard.size || "Не указан"}</p>
+                    <Maximize2 className="h-5 w-5 text-gray-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-gray-500">Размер (ВxШ)</p>
+                      <p className="font-medium truncate">{billboard.size || "Не указан"}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-3">
-                    <MapPin className="h-5 w-5 text-gray-500" />
-                    <div>
+                    <MapPin className="h-5 w-5 text-gray-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm text-gray-500">Адрес</p>
-                      <p className="font-medium">{billboard.address || "Не указан"}</p>
+                      <p className="font-medium line-clamp-2 text-sm leading-tight">
+                        {billboard.address || "Не указан"}
+                      </p>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-3">
-                    <Calendar className="h-5 w-5 text-gray-500" />
-                    <div>
+                    <Calendar className="h-5 w-5 text-gray-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm text-gray-500">Период аренды</p>
-                      <p className="font-medium">{billboard.period || "Не указан"}</p>
+                      <p className="font-medium truncate text-sm">{billboard.period || "Не указан"}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-gray-100">
+              <div className="mt-4 pt-4 border-t border-gray-100 shrink-0">
                 <Button variant="outline" className="w-full" onClick={onDetailsClick}>
                   Подробнее
                 </Button>
@@ -932,7 +918,7 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                   <div className="bg-gray-50 rounded-2xl p-6">
                     <div className="flex items-center space-x-3 mb-2">
                       <Maximize2 className="h-6 w-6 text-gray-500" />
-                      <p className="text-sm text-gray-500 font-medium">Размер (ШxВ)</p>
+                      <p className="text-sm text-gray-500 font-medium">Размер (ВxШ)</p>
                     </div>
                     <p className="text-lg font-semibold">{billboard.size || "Не указан"}</p>
                   </div>
