@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.utils.safestring import mark_safe
-from .models import Employee, Category, Billboard, BillboardImage
+from .models import Employee, Category, Billboard, BillboardImage, Contractor
 
 
 @admin.register(Employee)
@@ -89,6 +89,56 @@ class CategoryAdmin(admin.ModelAdmin):
     billboards_count.short_description = "Количество билбордов"
 
 
+@admin.register(Contractor)
+class ContractorAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "contact_person",
+        "phone",
+        "email",
+        "contract_number",
+        "billboards_count",
+        "is_active",
+    ]
+    list_filter = ["is_active", "created_at"]
+    search_fields = [
+        "name",
+        "contact_person",
+        "phone",
+        "email",
+        "contract_number",
+        "inn",
+    ]
+    readonly_fields = ["created_at", "updated_at", "billboards_count"]
+
+    fieldsets = (
+        (
+            "Основная информация",
+            {"fields": ("name", "contact_person", "phone", "email")},
+        ),
+        ("Адрес и контакты", {"fields": ("address", "website")}),
+        ("Документы", {"fields": ("contract_number", "inn")}),
+        ("Дополнительно", {"fields": ("notes", "is_active")}),
+        ("Статистика", {"fields": ("billboards_count",), "classes": ("collapse",)}),
+        (
+            "Системная информация",
+            {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
+        ),
+    )
+
+    def billboards_count(self, obj):
+        count = obj.billboards_count
+        if count > 0:
+            url = (
+                reverse("admin:billboards_billboard_changelist")
+                + f"?contractor__id__exact={obj.id}"
+            )
+            return format_html('<a href="{}">{} билбордов</a>', url, count)
+        return "0 билбордов"
+
+    billboards_count.short_description = "Количество билбордов"
+
+
 class BillboardImageInline(admin.TabularInline):
     model = BillboardImage
     extra = 1
@@ -112,6 +162,7 @@ class BillboardAdmin(admin.ModelAdmin):
         "id",
         "title",
         "category_badge",
+        "contractor_info",
         "employee",
         "size_display",
         "status_badge",
@@ -123,6 +174,7 @@ class BillboardAdmin(admin.ModelAdmin):
         "category",
         "status",
         "employee",
+        "contractor",
         "created_at",
         "start_date",
         "end_date",
@@ -133,6 +185,7 @@ class BillboardAdmin(admin.ModelAdmin):
         "employee__first_name",
         "employee__last_name",
         "category__name",
+        "contractor__name",
     ]
     readonly_fields = ["created_at", "updated_at", "days_until_expiry"]
     inlines = [BillboardImageInline]
@@ -140,7 +193,16 @@ class BillboardAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Основная информация",
-            {"fields": ("title", "description", "category", "employee", "status")},
+            {
+                "fields": (
+                    "title",
+                    "description",
+                    "category",
+                    "contractor",
+                    "employee",
+                    "status",
+                )
+            },
         ),
         (
             "Размеры и расположение",
@@ -156,15 +218,23 @@ class BillboardAdmin(admin.ModelAdmin):
     )
 
     def category_badge(self, obj):
-        color = obj.category.color if obj.category else "#000000"  # например, черный
-        name = obj.category.name if obj.category else "Без категории"
         return format_html(
-            '<span style="color:{};">{}</span>',
-            color,
-            name,
+            '<span style="background-color: {}; color: white; padding: 3px 8px; '
+            'border-radius: 12px; font-size: 11px; font-weight: bold;">{}</span>',
+            obj.category.color,
+            obj.category.name,
         )
 
     category_badge.short_description = "Категория"
+
+    def contractor_info(self, obj):
+        return format_html(
+            "<div><strong>{}</strong><br><small>{}</small></div>",
+            obj.contractor.name,
+            obj.contractor.display_contact,
+        )
+
+    contractor_info.short_description = "Контрагент"
 
     def status_badge(self, obj):
         colors = {
@@ -203,7 +273,11 @@ class BillboardAdmin(admin.ModelAdmin):
     days_left.short_description = "Осталось дней"
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("employee", "category")
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("employee", "category", "contractor")
+        )
 
 
 @admin.register(BillboardImage)

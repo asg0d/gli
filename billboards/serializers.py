@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Billboard, BillboardImage, Employee, Category
+from .models import Billboard, BillboardImage, Employee, Category, Contractor
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -36,6 +36,31 @@ class EmployeeSerializer(serializers.ModelSerializer):
         ]
 
 
+class ContractorSerializer(serializers.ModelSerializer):
+    billboards_count = serializers.ReadOnlyField()
+    display_contact = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Contractor
+        fields = [
+            "id",
+            "name",
+            "contact_person",
+            "phone",
+            "email",
+            "address",
+            "contract_number",
+            "inn",
+            "website",
+            "notes",
+            "is_active",
+            "billboards_count",
+            "display_contact",
+            "created_at",
+            "updated_at",
+        ]
+
+
 class BillboardImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = BillboardImage
@@ -45,6 +70,7 @@ class BillboardImageSerializer(serializers.ModelSerializer):
 class BillboardSerializer(serializers.ModelSerializer):
     images = BillboardImageSerializer(many=True, read_only=True)
     employee_name = serializers.CharField(source="employee.full_name", read_only=True)
+    contractor_data = ContractorSerializer(source="contractor", read_only=True)
     size = serializers.CharField(source="size_display", read_only=True)
     period = serializers.CharField(source="period_display", read_only=True)
     location = serializers.SerializerMethodField()
@@ -59,6 +85,8 @@ class BillboardSerializer(serializers.ModelSerializer):
             "description",
             "category",
             "category_data",
+            "contractor",
+            "contractor_data",
             "employee",
             "employee_name",
             "width",
@@ -89,6 +117,7 @@ class BillboardListSerializer(serializers.ModelSerializer):
 
     images = serializers.SerializerMethodField()
     employee = serializers.CharField(source="employee.full_name", read_only=True)
+    contractor_data = ContractorSerializer(source="contractor", read_only=True)
     size = serializers.CharField(source="size_display", read_only=True)
     period = serializers.CharField(source="period_display", read_only=True)
     location = serializers.SerializerMethodField()
@@ -101,6 +130,8 @@ class BillboardListSerializer(serializers.ModelSerializer):
             "title",
             "category",
             "category_data",
+            "contractor",
+            "contractor_data",
             "images",
             "employee",
             "size",

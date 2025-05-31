@@ -1,8 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
-from django.utils import timezone
-
 
 class Employee(models.Model):
     """Модель сотрудника, ответственного за билборд"""
@@ -51,6 +49,44 @@ class Category(models.Model):
         """Количество билбордов в категории"""
         return self.billboards.count()
 
+class Contractor(models.Model):
+    """Модель контрагента (клиента)"""
+    name = models.CharField('Название компании', max_length=200)
+    contact_person = models.CharField('Контактное лицо', max_length=150, blank=True)
+    phone = models.CharField('Телефон', max_length=20, blank=True)
+    email = models.EmailField('Email', blank=True)
+    address = models.TextField('Адрес', blank=True)
+    contract_number = models.CharField('Номер договора', max_length=50, blank=True)
+    inn = models.CharField('ИНН', max_length=20, blank=True, help_text='Идентификационный номер налогоплательщика')
+    website = models.URLField('Веб-сайт', blank=True)
+    notes = models.TextField('Заметки', blank=True)
+    is_active = models.BooleanField('Активен', default=True)
+    created_at = models.DateTimeField('Дата создания', auto_now_add=True)
+    updated_at = models.DateTimeField('Дата обновления', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Контрагент'
+        verbose_name_plural = 'Контрагенты'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def billboards_count(self):
+        """Количество билбордов контрагента"""
+        return self.billboards.count()
+
+    @property
+    def display_contact(self):
+        """Отображение контактной информации"""
+        contact_parts = []
+        if self.contact_person:
+            contact_parts.append(self.contact_person)
+        if self.phone:
+            contact_parts.append(self.phone)
+        return ' • '.join(contact_parts) if contact_parts else 'Не указано'
+
 class Billboard(models.Model):
     """Модель билборда"""
     
@@ -71,7 +107,16 @@ class Billboard(models.Model):
         on_delete=models.CASCADE,
         verbose_name='Категория',
         related_name='billboards',
-        help_text='Тип рекламной конструкции',
+        help_text='Тип рекламной конструкции'
+    )
+    
+    # Контрагент (клиент)
+    contractor = models.ForeignKey(
+        Contractor,
+        on_delete=models.CASCADE,
+        verbose_name='Контрагент',
+        related_name='billboards',
+        help_text='Клиент, арендующий рекламную конструкцию',
         blank=True,
         null=True,
     )
@@ -84,7 +129,7 @@ class Billboard(models.Model):
         related_name='billboards'
     )
     
-    # Размеры
+    # Размеры (поменяли местами ширину и высоту)
     width = models.DecimalField(
         'Ширина (м)', 
         max_digits=5, 
@@ -145,14 +190,12 @@ class Billboard(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        category_name = self.category.name if self.category else "Без категории"
-        return f"{category_name} #{self.id} - {self.title}"
-
+        return f"{self.category.name} #{self.id} - {self.title}"
 
     @property
     def size_display(self):
         """Отображение размера в формате 'ШxВ м'"""
-        return f"{self.height}x{self.width} м"
+        return f"{self.width}x{self.height} м"
 
     @property
     def period_display(self):
@@ -166,10 +209,9 @@ class Billboard(models.Model):
 
     @property
     def days_until_expiry(self):
-        if self.end_date is None:
-            return f"Дата не указана"  # или можно вернуть 0, или строку "Дата не указана"
+        """Количество дней до истечения аренды"""
         delta = self.end_date - timezone.now().date()
-        return delta.days
+        return delta.days if delta.days > 0 else 0
 
 def billboard_image_upload_path(instance, filename):
     """Путь для загрузки изображений билбордов"""

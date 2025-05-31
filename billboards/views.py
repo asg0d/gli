@@ -2,12 +2,13 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Q, Count
-from .models import Billboard, Employee, Category
+from .models import Billboard, Employee, Category, Contractor
 from .serializers import (
     BillboardSerializer,
     BillboardListSerializer,
     EmployeeSerializer,
     CategorySerializer,
+    ContractorSerializer,
 )
 
 
@@ -16,10 +17,15 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CategorySerializer
 
 
+class ContractorViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Contractor.objects.filter(is_active=True)
+    serializer_class = ContractorSerializer
+
+
 class BillboardViewSet(viewsets.ModelViewSet):
     queryset = (
         Billboard.objects.all()
-        .select_related("employee", "category")
+        .select_related("employee", "category", "contractor")
         .prefetch_related("images")
     )
 
@@ -49,6 +55,11 @@ class BillboardViewSet(viewsets.ModelViewSet):
         if employee_id:
             queryset = queryset.filter(employee_id=employee_id)
 
+        # Фильтрация по контрагенту
+        contractor_id = self.request.query_params.get("contractor", None)
+        if contractor_id:
+            queryset = queryset.filter(contractor_id=contractor_id)
+
         # Поиск по адресу или названию
         search = self.request.query_params.get("search", None)
         if search:
@@ -58,6 +69,8 @@ class BillboardViewSet(viewsets.ModelViewSet):
                 | Q(employee__first_name__icontains=search)
                 | Q(employee__last_name__icontains=search)
                 | Q(category__name__icontains=search)
+                | Q(contractor__name__icontains=search)
+                | Q(contractor__contact_person__icontains=search)
             )
 
         return queryset
@@ -79,6 +92,13 @@ class BillboardViewSet(viewsets.ModelViewSet):
         for category in Category.objects.filter(is_active=True):
             categories_stats[category.slug] = queryset.filter(category=category).count()
 
+        # Статистика по контрагентам
+        contractors_stats = {}
+        for contractor in Contractor.objects.filter(is_active=True):
+            count = queryset.filter(contractor=contractor).count()
+            if count > 0:
+                contractors_stats[contractor.name] = count
+
         return Response(
             {
                 "total": total,
@@ -87,6 +107,7 @@ class BillboardViewSet(viewsets.ModelViewSet):
                 "expired": expired,
                 "maintenance": maintenance,
                 "categories": categories_stats,
+                "contractors": contractors_stats,
             }
         )
 
@@ -118,6 +139,17 @@ class BillboardViewSet(viewsets.ModelViewSet):
         else:
             queryset = self.get_queryset().filter(category__slug=category)
 
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"])
+    def by_contractor(self, request):
+        """Получение билбордов по контрагентам"""
+        contractor_id = request.query_params.get("contractor")
+        if not contractor_id:
+            return Response({"error": "Contractor parameter is required"}, status=400)
+
+        queryset = self.get_queryset().filter(contractor_id=contractor_id)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
