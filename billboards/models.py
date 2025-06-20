@@ -211,9 +211,9 @@ class Billboard(models.Model):
 
     @property
     def days_until_expiry(self):
-        """Количество дней до истечения аренды"""
-        delta = self.end_date - timezone.now().date()
-        return delta.days if delta.days > 0 else 0
+        if self.end_date is None:
+            return None  # или 0, или timedelta(0), в зависимости от логики
+        return self.end_date - timezone.now().date()
 
 def billboard_image_upload_path(instance, filename):
     """Путь для загрузки изображений билбордов"""
