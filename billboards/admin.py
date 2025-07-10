@@ -256,19 +256,14 @@ class BillboardAdmin(admin.ModelAdmin):
     status_badge.short_description = "Статус"
 
     def days_left(self, obj):
-        days = obj.days_until_expiry
+        delta = obj.days_until_expiry
+        days = delta.days if delta else 0
         if days <= 0:
-            return format_html(
-                '<span style="color: red; font-weight: bold;">Истёк</span>'
-            )
+            return format_html('<span style="color: red; font-weight: bold;">Истёк</span>')
         elif days <= 7:
-            return format_html(
-                '<span style="color: orange; font-weight: bold;">{} дней</span>', days
-            )
+            return format_html('<span style="color: orange; font-weight: bold;">{} дней</span>', days)
         elif days <= 30:
-            return format_html(
-                '<span style="color: #ffc107; font-weight: bold;">{} дней</span>', days
-            )
+            return format_html('<span style="color: #ffc107; font-weight: bold;">{} дней</span>', days)
         else:
             return format_html('<span style="color: green;">{} дней</span>', days)
 
