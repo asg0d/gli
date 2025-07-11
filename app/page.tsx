@@ -1,8 +1,6 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { motion, useAnimation, AnimatePresence } from "framer-motion"
 import { useInView } from "react-intersection-observer"
 import Image from "next/image"
@@ -18,24 +16,34 @@ import {
   AlertCircle,
   Monitor,
   Bus,
-  Wifi,
   WifiOff,
   Loader2,
   ChevronDown,
+  ChevronUp,
   Building2,
   Phone,
   Mail,
   FileText,
+  Filter,
+  Search,
+  Users,
+  CheckCircle,
+  Clock,
+  XCircle,
+  Settings,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiService, type Billboard, type Category } from "@/lib/api"
 
-// Обновляем компонент Dashboard
+// Dashboard component
 export default function Dashboard() {
   const [billboards, setBillboards] = useState<Billboard[]>([])
+  const [filteredBillboards, setFilteredBillboards] = useState<Billboard[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedBillboard, setSelectedBillboard] = useState<Billboard | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -45,6 +53,13 @@ export default function Dashboard() {
   const [apiStatus, setApiStatus] = useState<{ status: string; message: string } | null>(null)
   const [nextPage, setNextPage] = useState<number | null>(null)
   const [totalCount, setTotalCount] = useState<number>(0)
+  const [isFilterOpen, setIsFilterOpen] = useState(false) // New state for filter visibility
+
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState<string>("")
+  const [selectedStatus, setSelectedStatus] = useState<string>("all")
+  const [selectedEmployee, setSelectedEmployee] = useState<string>("all")
+  const [employees, setEmployees] = useState<Array<{ id: number; full_name: string; email: string }>>([])
 
   useEffect(() => {
     loadDataFromApi()
@@ -56,44 +71,50 @@ export default function Dashboard() {
     }
   }, [activeCategory])
 
+  // Filter effect
+  useEffect(() => {
+    applyFilters()
+  }, [billboards, searchQuery, selectedStatus, selectedEmployee])
+
   const loadDataFromApi = async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      console.log("🚀 Начинаем загрузку данных...")
+      console.log("🚀 Starting data loading...")
 
-      // Проверяем доступность API
+      // Check API health
       const healthCheck = await apiService.checkApiHealth()
       setApiStatus(healthCheck)
 
-      // Загружаем категории (теперь с fallback на mock данные)
-      const categoriesData = await apiService.getCategories()
+      // Load categories and employees
+      const [categoriesData, employeesData] = await Promise.all([apiService.getCategories(), apiService.getEmployees()])
 
       if (!categoriesData || categoriesData.length === 0) {
-        throw new Error("Не удалось получить категории")
+        throw new Error("Failed to load categories")
       }
 
       setCategories(categoriesData)
-      console.log("📂 Категории загружены:", categoriesData)
+      setEmployees(employeesData)
+      console.log("📂 Categories loaded:", categoriesData)
 
-      // Устанавливаем первую категорию как активную
+      // Set the first category as active
       if (categoriesData.length > 0) {
         setActiveCategory(categoriesData[0].slug)
       }
 
-      // Если API недоступен, показываем предупреждение, но не ошибку
+      // Handle API unavailable case
       if (healthCheck.status === "error") {
-        setError("API недоступен, отображаются демонстрационные данные")
+        setError("API unavailable, displaying demo data")
       } else {
         setError(null)
       }
     } catch (error) {
-      console.error("❌ Ошибка загрузки данных:", error)
-      setError(`Ошибка: ${error}`)
+      console.error("❌ Error loading data:", error)
+      setError(`Error: ${error}`)
       setApiStatus({ status: "error", message: String(error) })
 
-      // Даже при ошибке пытаемся загрузить mock данные
+      // Fallback to mock data
       try {
         const mockCategories = await apiService.getCategories()
         setCategories(mockCategories)
@@ -101,7 +122,7 @@ export default function Dashboard() {
           setActiveCategory(mockCategories[0].slug)
         }
       } catch (mockError) {
-        console.error("❌ Не удалось загрузить даже mock данные:", mockError)
+        console.error("❌ Failed to load mock data:", mockError)
       }
     } finally {
       setIsLoading(false)
@@ -112,37 +133,26 @@ export default function Dashboard() {
     try {
       if (page === 1) {
         setIsLoading(true)
-        setBillboards([]) // Очищаем список при загрузке первой страницы
+        setBillboards([])
       } else {
         setIsLoadingMore(true)
       }
 
-      console.log(`📋 Загружаем билборды для категории: ${categorySlug}, страница: ${page}`)
+      console.log(`📋 Loading billboards for category: ${categorySlug}, page: ${page}`)
 
-      const {
-        billboards: data,
-        nextPage: next,
-        totalCount: count,
-      } = await apiService.getBillboards({
+      const { billboards: billboardsArray, nextPage, totalCount } = await apiService.getBillboards({
         category: categorySlug,
         page: page,
       })
 
-      if (page === 1) {
-        setBillboards(data)
-      } else {
-        setBillboards((prev) => [...prev, ...data])
-      }
+      setBillboards(page === 1 ? billboardsArray : [...billboards, ...billboardsArray])
+      setNextPage(nextPage)
+      setTotalCount(totalCount)
 
-      setNextPage(next)
-      setTotalCount(count)
-
-      console.log(
-        `✅ Успешно загружено ${data.length} билбордов для категории ${categorySlug}. Всего: ${count}, следующая страница: ${next}`,
-      )
+      console.log(`✅ Successfully loaded ${billboardsArray.length} billboards for category ${categorySlug}`)
     } catch (error) {
-      console.error("❌ Ошибка загрузки билбордов:", error)
-      setError(`Не удалось загрузить билборды: ${error}`)
+      console.error("❌ Error loading billboards:", error)
+      setError(`Failed to load billboards: ${error}`)
       if (page === 1) {
         setBillboards([])
       }
@@ -150,6 +160,48 @@ export default function Dashboard() {
       setIsLoading(false)
       setIsLoadingMore(false)
     }
+  }
+
+  const applyFilters = () => {
+    let filtered = [...billboards]
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter(
+        (billboard) =>
+          billboard.title?.toLowerCase().includes(query) ||
+          billboard.address?.toLowerCase().includes(query) ||
+          billboard.employee_name?.toLowerCase().includes(query) ||
+          billboard.description?.toLowerCase().includes(query),
+      )
+    }
+
+    // Status filter
+    if (selectedStatus !== "all") {
+      filtered = filtered.filter((billboard) => billboard.status === selectedStatus)
+    }
+
+    // Employee filter
+    if (selectedEmployee !== "all") {
+      filtered = filtered.filter((billboard) => billboard.employee_id?.toString() === selectedEmployee)
+    }
+
+    setFilteredBillboards(filtered)
+  }
+
+  const clearAllFilters = () => {
+    setSearchQuery("")
+    setSelectedStatus("all")
+    setSelectedEmployee("all")
+  }
+
+  const getActiveFiltersCount = () => {
+    let count = 0
+    if (searchQuery.trim()) count++
+    if (selectedStatus !== "all") count++
+    if (selectedEmployee !== "all") count++
+    return count
   }
 
   const loadMoreBillboards = () => {
@@ -168,11 +220,16 @@ export default function Dashboard() {
 
   const handleCategoryChange = (categorySlug: string) => {
     setActiveCategory(categorySlug)
+    clearAllFilters()
   }
 
   const handleRefresh = () => {
-    console.log("🔄 Принудительное обновление данных...")
+    console.log("🔄 Refreshing data...")
     loadDataFromApi()
+  }
+
+  const toggleFilter = () => {
+    setIsFilterOpen((prev) => !prev)
   }
 
   const getIconComponent = (iconName?: string) => {
@@ -186,14 +243,29 @@ export default function Dashboard() {
     }
   }
 
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "active":
+        return <CheckCircle className="h-4 w-4" />
+      case "pending":
+        return <Clock className="h-4 w-4" />
+      case "expired":
+        return <XCircle className="h-4 w-4" />
+      case "maintenance":
+        return <Settings className="h-4 w-4" />
+      default:
+        return <CheckCircle className="h-4 w-4" />
+    }
+  }
+
   if (isLoading && categories.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-16 w-16 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600 text-lg">Загрузка данных с API...</p>
+          <p className="text-gray-600 text-lg">Loading data from API...</p>
           <p className="text-sm text-gray-500 mt-2">api.location.utu-ranch.uz</p>
-          {apiStatus && <p className="text-xs text-gray-400 mt-1">Статус: {apiStatus.message}</p>}
+          {apiStatus && <p className="text-xs text-gray-400 mt-1">Status: {apiStatus.message}</p>}
         </div>
       </div>
     )
@@ -204,11 +276,11 @@ export default function Dashboard() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center max-w-md">
           <WifiOff className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Ошибка подключения к API</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">API Connection Error</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <Button onClick={handleRefresh} className="flex items-center space-x-2">
             <RefreshCw className="h-4 w-4" />
-            <span>Попробовать снова</span>
+            <span>Try Again</span>
           </Button>
         </div>
       </div>
@@ -217,21 +289,41 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Main Content */}
-      <section className="container mx-auto px-4 py-8">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }} className="mb-8">
+      {/* Sticky Header with Filters */}
+      <div className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
+        <div className="container mx-auto px-4 py-6">
+          {/* Title, Refresh, and Filter Toggle */}
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h2 className="text-3xl font-bold mb-2">Рекламные конструкции</h2>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Advertising Structures</h1>
+              <p className="text-gray-600">Manage billboards and bus stops</p>
             </div>
-            <Button onClick={handleRefresh} variant="outline" className="flex items-center space-x-2">
-              <RefreshCw className="h-4 w-4" />
-              <span>Обновить</span>
-            </Button>
+            <div className="flex items-center space-x-4">
+              <Button
+                onClick={handleRefresh}
+                variant="outline"
+                className="flex items-center space-x-2 bg-transparent"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span>Refresh</span>
+              </Button>
+              <Button
+                onClick={toggleFilter}
+                variant="outline"
+                className="flex items-center space-x-2 bg-transparent"
+              >
+                <Filter className="h-4 w-4" />
+                <span>Filters</span>
+                {isFilterOpen ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
 
-
-
+          {/* API Status */}
           {apiStatus?.status === "error" && (
             <motion.div
               initial={{ opacity: 0, y: -20 }}
@@ -240,29 +332,238 @@ export default function Dashboard() {
             >
               <WifiOff className="h-5 w-5 text-yellow-600 flex-shrink-0" />
               <div>
-                <p className="text-yellow-800 font-medium">API недоступен</p>
-                <p className="text-yellow-700 text-sm">Отображаются демонстрационные данные. {apiStatus.message}</p>
+                <p className="text-yellow-800 font-medium">API Unavailable</p>
+                <p className="text-yellow-700 text-sm">Displaying demo data. {apiStatus.message}</p>
               </div>
             </motion.div>
           )}
 
+          {/* Collapsible Filters Section */}
+          <AnimatePresence>
+            {isFilterOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="overflow-hidden"
+                // Optional: Uncomment for hover support
+                // onMouseEnter={() => setIsFilterOpen(true)}
+                // onMouseLeave={() => setIsFilterOpen(false)}
+              >
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Filter className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900">Filters and Search</h3>
+                      {getActiveFiltersCount() > 0 && (
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                          {getActiveFiltersCount()} active
+                        </Badge>
+                      )}
+                    </div>
+                    {getActiveFiltersCount() > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearAllFilters}
+                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Clear All
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Search */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 flex items-center space-x-2">
+                        <Search className="h-4 w-4 text-gray-500" />
+                        <span>Search</span>
+                      </label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          placeholder="Search by title, address..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-10 bg-white border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Status Filter */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 flex items-center space-x-2">
+                        <CheckCircle className="h-4 w-4 text-gray-500" />
+                        <span>Status</span>
+                      </label>
+                      <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                        <SelectTrigger className="bg-white border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">
+                            <div className="flex items-center space-x-2">
+                              <Filter className="h-4 w-4 text-gray-500" />
+                              <span>All statuses</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="active">
+                            <div className="flex items-center space-x-2">
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                              <span>Active</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="pending">
+                            <div className="flex items-center space-x-2">
+                              <Clock className="h-4 w-4 text-yellow-500" />
+                              <span>Pending</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="expired">
+                            <div className="flex items-center space-x-2">
+                              <XCircle className="h-4 w-4 text-red-500" />
+                              <span>Expired</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="maintenance">
+                            <div className="flex items-center space-x-2">
+                              <Settings className="h-4 w-4 text-blue-500" />
+                              <span>Maintenance</span>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Employee Filter */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 flex items-center space-x-2">
+                        <Users className="h-4 w-4 text-gray-500" />
+                        <span>Responsible</span>
+                      </label>
+                      <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                        <SelectTrigger className="bg-white border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">
+                            <div className="flex items-center space-x-2">
+                              <Users className="h-4 w-4 text-gray-500" />
+                              <span>All employees</span>
+                            </div>
+                          </SelectItem>
+                          {employees.map((employee) => (
+                            <SelectItem key={employee.id} value={employee.id.toString()}>
+                              <div className="flex items-center space-x-2">
+                                <User className="h-4 w-4 text-gray-500" />
+                                <span>{employee.full_name}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Results Counter */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Results</label>
+                      <div className="bg-white border border-gray-200 rounded-md px-3 py-2 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-blue-600">{filteredBillboards.length}</div>
+                          <div className="text-xs text-gray-500">of {billboards.length}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Active Filters Display */}
+                  {getActiveFiltersCount() > 0 && (
+                    <div className="mt-4 pt-4 border-t border-blue-200">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm text-gray-600">Active filters:</span>
+                        {searchQuery.trim() && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer"
+                            onClick={() => setSearchQuery("")}
+                          >
+                            Search: "{searchQuery}"
+                            <X className="h-3 w-3 ml-1" />
+                          </Badge>
+                        )}
+                        {selectedStatus !== "all" && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer"
+                            onClick={() => setSelectedStatus("all")}
+                          >
+                            {getStatusIcon(selectedStatus)}
+                            <span className="ml-1">
+                              {selectedStatus === "active" && "Active"}
+                              {selectedStatus === "pending" && "Pending"}
+                              {selectedStatus === "expired" && "Expired"}
+                              {selectedStatus === "maintenance" && "Maintenance"}
+                            </span>
+                            <X className="h-3 w-3 ml-1" />
+                          </Badge>
+                        )}
+                        {selectedEmployee !== "all" && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer"
+                            onClick={() => setSelectedEmployee("all")}
+                          >
+                            <User className="h-3 w-3 mr-1" />
+                            {employees.find((emp) => emp.id.toString() === selectedEmployee)?.full_name}
+                            <X className="h-3 w-3 ml-1" />
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Category Tabs */}
           {categories.length > 0 && (
-            <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 gap-2">
-                {categories.map((category) => (
-                  <TabsTrigger key={category.slug} value={category.slug} className="flex items-center space-x-2">
-                    {getIconComponent(category.icon)}
-                    <span>{category.name}</span>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+            <div className="mt-6">
+              <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
+                <TabsList className="grid w-full grid-cols-3 gap-2 bg-white">
+                  {categories.map((category) => (
+                    <TabsTrigger
+                      key={category.slug}
+                      value={category.slug}
+                      className="flex items-center space-x-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                    >
+                      {getIconComponent(category.icon)}
+                      <span>{category.name}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
+          )}
+        </div>
+      </div>
 
+      {/* Main Content */}
+      <section className="container mx-auto px-4 py-8">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }}>
+          {categories.length > 0 && (
+            <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
               {categories.map((category) => (
-                <TabsContent key={category.slug} value={category.slug} className="mt-6">
+                <TabsContent key={category.slug} value={category.slug} className="mt-0">
                   <CategoryContent
                     category={category}
-                    billboards={billboards}
+                    billboards={filteredBillboards}
+                    allBillboards={billboards}
                     isLoading={isLoading}
                     isLoadingMore={isLoadingMore}
                     error={error}
@@ -270,6 +571,7 @@ export default function Dashboard() {
                     onLoadMore={loadMoreBillboards}
                     hasMore={nextPage !== null}
                     totalCount={totalCount}
+                    isFiltered={getActiveFiltersCount() > 0}
                   />
                 </TabsContent>
               ))}
@@ -284,10 +586,11 @@ export default function Dashboard() {
   )
 }
 
-// Обновляем интерфейс CategoryContentProps
+// CategoryContent component
 interface CategoryContentProps {
   category: Category
   billboards: Billboard[]
+  allBillboards: Billboard[]
   isLoading: boolean
   isLoadingMore: boolean
   error: string | null
@@ -295,12 +598,13 @@ interface CategoryContentProps {
   onLoadMore: () => void
   hasMore: boolean
   totalCount: number
+  isFiltered: boolean
 }
 
-// Обновляем компонент CategoryContent
 function CategoryContent({
   category,
   billboards,
+  allBillboards,
   isLoading,
   isLoadingMore,
   error,
@@ -308,6 +612,7 @@ function CategoryContent({
   onLoadMore,
   hasMore,
   totalCount,
+  isFiltered,
 }: CategoryContentProps) {
   return (
     <div>
@@ -316,9 +621,32 @@ function CategoryContent({
           {category.name}
         </h3>
         <p className="text-gray-600">{category.description}</p>
-        <p className="text-sm text-gray-500 mt-1">
-          Показано: {billboards.length} из {totalCount}
-        </p>
+        <div className="flex items-center space-x-4 mt-2">
+          <p className="text-sm text-gray-500">
+            {isFiltered ? (
+              <>
+                Found: <span className="font-medium text-blue-600">{billboards.length}</span> of{" "}
+                <span className="font-medium">{allBillboards.length}</span> loaded
+              </>
+            ) : (
+              <>
+                Shown: <span className="font-medium">{allBillboards.length}</span>
+                {totalCount > allBillboards.length && (
+                  <>
+                    {" "}
+                    of <span className="font-medium">{totalCount}</span>
+                  </>
+                )}
+              </>
+            )}
+          </p>
+          {isFiltered && (
+            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+              <Filter className="h-3 w-3 mr-1" />
+              Filters active
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Error Message */}
@@ -330,7 +658,7 @@ function CategoryContent({
         >
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
           <div>
-            <p className="text-red-800 font-medium">Ошибка загрузки</p>
+            <p className="text-red-800 font-medium">Loading Error</p>
             <p className="text-red-700 text-sm">{error}</p>
           </div>
         </motion.div>
@@ -339,13 +667,19 @@ function CategoryContent({
       {isLoading ? (
         <div className="text-center py-16">
           <Loader2 className="h-16 w-16 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Загрузка {category.name.toLowerCase()} с API...</p>
+          <p className="text-gray-600">Loading {category.name.toLowerCase()} from API...</p>
         </div>
       ) : billboards.length === 0 ? (
         <div className="text-center py-16">
           <div className="text-gray-400 text-6xl mb-4">{category.icon === "bus" ? "🚌" : "📋"}</div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Нет {category.name.toLowerCase()}</h3>
-          <p className="text-gray-600">API не вернул данные для этой категории или они еще не добавлены</p>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            {isFiltered ? "Nothing found" : `No ${category.name.toLowerCase()}`}
+          </h3>
+          <p className="text-gray-600">
+            {isFiltered
+              ? "Try changing search parameters or clearing filters"
+              : "API returned no data for this category or it hasn't been added yet"}
+          </p>
         </div>
       ) : (
         <>
@@ -361,30 +695,28 @@ function CategoryContent({
           </div>
 
           {/* Load More Button */}
-          {hasMore && (
+          {!isFiltered && hasMore && allBillboards.length > 0 && (
             <div className="mt-10 text-center">
               <Button
                 onClick={onLoadMore}
                 disabled={isLoadingMore}
                 variant="outline"
                 size="lg"
-                className="px-8 py-6 text-lg"
+                className="px-8 py-6 text-lg bg-transparent"
               >
                 {isLoadingMore ? (
                   <>
                     <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    Загрузка...
+                    Loading...
                   </>
                 ) : (
                   <>
                     <ChevronDown className="h-5 w-5 mr-2" />
-                    Загрузить еще
+                    Load More
                   </>
                 )}
               </Button>
-              <p className="text-sm text-gray-500 mt-2">
-                Показано {billboards.length} из {totalCount}
-              </p>
+              <p className="text-sm text-gray-500 mt-2">Shown {allBillboards.length}</p>
             </div>
           )}
         </>
@@ -393,20 +725,21 @@ function CategoryContent({
   )
 }
 
-// Функция для получения названия билборда
+// Helper function to get billboard name
 function getBillboardName(billboard: Billboard): string {
   if (!billboard) {
-    return "Неизвестная конструкция"
+    return "Unknown structure"
   }
 
   if (billboard.title && billboard.title.trim()) {
     return billboard.title.trim()
   }
 
-  const categoryName = billboard.category_data?.name || "Рекламная конструкция"
+  const categoryName = billboard.category_data?.name || "Advertising structure"
   return `${categoryName} #${billboard.id}`
 }
 
+// BillboardCard component
 interface BillboardCardProps {
   billboard: Billboard
   index: number
@@ -477,15 +810,15 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
   const getStatusText = (status: string) => {
     switch (status) {
       case "active":
-        return "Активен"
+        return "Active"
       case "pending":
-        return "Ожидание"
+        return "Pending"
       case "expired":
-        return "Истёк"
+        return "Expired"
       case "maintenance":
-        return "Обслуживание"
+        return "Maintenance"
       default:
-        return "Неизвестно"
+        return "Unknown"
     }
   }
 
@@ -516,8 +849,8 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
             <div className="md:w-1/2 relative">
               <div className="relative h-64 md:h-80">
                 <Image
-                  src={currentImage || "/placeholder.svg"}
-                  alt={`${billboardName} - фото ${currentImageIndex + 1}`}
+                  src={currentImage}
+                  alt={`${billboardName} - photo ${currentImageIndex + 1}`}
                   fill
                   className="object-cover"
                 />
@@ -528,7 +861,7 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
                   style={{ borderLeft: `3px solid ${billboard.category_data?.color || "#3b82f6"}` }}
                 >
                   {getIconComponent(billboard.category_data?.icon)}
-                  <span className="text-xs font-medium">{billboard.category_data?.name || "Реклама"}</span>
+                  <span className="text-xs font-medium">{billboard.category_data?.name || "Advertising"}</span>
                 </div>
 
                 {/* API Badge */}
@@ -558,8 +891,9 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
                         <button
                           key={idx}
                           onClick={(e) => setImageIndex(e, idx)}
-                          className={`w-2 h-2 rounded-full transition-colors ${idx === currentImageIndex ? "bg-white" : "bg-white/50"
-                            }`}
+                          className={`w-2 h-2 rounded-full transition-colors ${
+                            idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                          }`}
                         />
                       ))}
                     </div>
@@ -584,25 +918,25 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
                   <div className="flex items-center space-x-3">
                     <User className="h-5 w-5 text-gray-500 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-500">Ответственный</p>
-                      <p className="font-medium truncate">{billboard.employee || "Не указан"}</p>
+                      <p className="text-sm text-gray-500">Responsible</p>
+                      <p className="font-medium truncate">{billboard.employee_name || "Not specified"}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-3">
                     <Maximize2 className="h-5 w-5 text-gray-500 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-500">Размер (ВxШ)</p>
-                      <p className="font-medium truncate">{billboard.size || "Не указан"}</p>
+                      <p className="text-sm text-gray-500">Size (HxW)</p>
+                      <p className="font-medium truncate">{billboard.size || "Not specified"}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-3">
                     <MapPin className="h-5 w-5 text-gray-500 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-500">Адрес</p>
+                      <p className="text-sm text-gray-500">Address</p>
                       <p className="font-medium line-clamp-2 text-sm leading-tight">
-                        {billboard.address || "Не указан"}
+                        {billboard.address || "Not specified"}
                       </p>
                     </div>
                   </div>
@@ -610,16 +944,16 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
                   <div className="flex items-center space-x-3">
                     <Calendar className="h-5 w-5 text-gray-500 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-500">Период аренды</p>
-                      <p className="font-medium truncate text-sm">{billboard.period || "Не указан"}</p>
+                      <p className="text-sm text-gray-500">Rental Period</p>
+                      <p className="font-medium truncate text-sm">{billboard.period || "Not specified"}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
               <div className="mt-4 pt-4 border-t border-gray-100 shrink-0">
-                <Button variant="outline" className="w-full" onClick={onDetailsClick}>
-                  Подробнее
+                <Button variant="outline" className="w-full bg-transparent" onClick={onDetailsClick}>
+                  Details
                 </Button>
               </div>
             </div>
@@ -630,6 +964,7 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
   )
 }
 
+// BillboardModal component
 interface BillboardModalProps {
   billboard: Billboard | null
   onClose: () => void
@@ -690,15 +1025,15 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
   const getStatusText = (status: string) => {
     switch (status) {
       case "active":
-        return "Активен"
+        return "Active"
       case "pending":
-        return "Ожидание"
+        return "Pending"
       case "expired":
-        return "Истёк"
+        return "Expired"
       case "maintenance":
-        return "Обслуживание"
+        return "Maintenance"
       default:
-        return "Неизвестно"
+        return "Unknown"
     }
   }
 
@@ -759,7 +1094,7 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                       {getIconComponent(billboard.category_data?.icon)}
                     </div>
                     <h1 className="text-3xl md:text-4xl font-bold">{billboardName}</h1>
-                    <Badge className="bg-green-100 text-green-800">Загружено с API</Badge>
+                    <Badge className="bg-green-100 text-green-800">Loaded from API</Badge>
                   </div>
                   <Badge className={`${getStatusColor(billboard.status)} text-lg px-4 py-2`}>
                     {getStatusText(billboard.status)}
@@ -798,7 +1133,7 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                             <div className="flex items-center space-x-2">
                               <FileText className="h-4 w-4 text-blue-600" />
                               <span className="text-blue-800">
-                                Договор: {billboard.contractor_data.contract_number}
+                                Contract: {billboard.contractor_data.contract_number}
                               </span>
                             </div>
                           )}
@@ -820,8 +1155,8 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                   <div className="relative">
                     <div className="relative aspect-square rounded-3xl overflow-hidden shadow-lg">
                       <Image
-                        src={currentImage || "/placeholder.svg"}
-                        alt={`${billboardName} - фото ${currentImageIndex + 1}`}
+                        src={currentImage}
+                        alt={`${billboardName} - photo ${currentImageIndex + 1}`}
                         fill
                         className="object-cover"
                       />
@@ -848,8 +1183,9 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                               <button
                                 key={idx}
                                 onClick={(e) => setImageIndex(e, idx)}
-                                className={`w-3 h-3 rounded-full transition-colors ${idx === currentImageIndex ? "bg-white" : "bg-white/50"
-                                  }`}
+                                className={`w-3 h-3 rounded-full transition-colors ${
+                                  idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                                }`}
                               />
                             ))}
                           </div>
@@ -869,7 +1205,7 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                         allowFullScreen
                         loading="lazy"
                         referrerPolicy="no-referrer-when-downgrade"
-                        title={`Яндекс карта расположения ${billboardName}`}
+                        title={`Yandex Map for ${billboardName}`}
                       />
                     )}
                   </div>
@@ -880,40 +1216,40 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                   <div className="bg-gray-50 rounded-2xl p-6">
                     <div className="flex items-center space-x-3 mb-2">
                       <User className="h-6 w-6 text-gray-500" />
-                      <p className="text-sm text-gray-500 font-medium">Ответственный</p>
+                      <p className="text-sm text-gray-500 font-medium">Responsible</p>
                     </div>
-                    <p className="text-lg font-semibold">{billboard.employee || "Не указан"}</p>
+                    <p className="text-lg font-semibold">{billboard.employee_name || "Not specified"}</p>
                   </div>
 
                   <div className="bg-gray-50 rounded-2xl p-6">
                     <div className="flex items-center space-x-3 mb-2">
                       <Maximize2 className="h-6 w-6 text-gray-500" />
-                      <p className="text-sm text-gray-500 font-medium">Размер (ВxШ)</p>
+                      <p className="text-sm text-gray-500 font-medium">Size (HxW)</p>
                     </div>
-                    <p className="text-lg font-semibold">{billboard.size || "Не указан"}</p>
+                    <p className="text-lg font-semibold">{billboard.size || "Not specified"}</p>
                   </div>
 
                   <div className="bg-gray-50 rounded-2xl p-6">
                     <div className="flex items-center space-x-3 mb-2">
                       <MapPin className="h-6 w-6 text-gray-500" />
-                      <p className="text-sm text-gray-500 font-medium">Адрес</p>
+                      <p className="text-sm text-gray-500 font-medium">Address</p>
                     </div>
-                    <p className="text-lg font-semibold">{billboard.address || "Не указан"}</p>
+                    <p className="text-lg font-semibold">{billboard.address || "Not specified"}</p>
                   </div>
 
                   <div className="bg-gray-50 rounded-2xl p-6">
                     <div className="flex items-center space-x-3 mb-2">
                       <Calendar className="h-6 w-6 text-gray-500" />
-                      <p className="text-sm text-gray-500 font-medium">Период аренды</p>
+                      <p className="text-sm text-gray-500 font-medium">Rental Period</p>
                     </div>
-                    <p className="text-lg font-semibold">{billboard.period || "Не указан"}</p>
+                    <p className="text-lg font-semibold">{billboard.period || "Not specified"}</p>
                   </div>
                 </div>
 
                 {/* Description */}
                 {billboard.description && (
                   <div className="bg-white border border-gray-200 rounded-2xl p-8">
-                    <h3 className="text-2xl font-semibold mb-4">Описание</h3>
+                    <h3 className="text-2xl font-semibold mb-4">Description</h3>
                     <p className="text-gray-600 text-lg leading-relaxed">{billboard.description}</p>
                   </div>
                 )}
@@ -921,7 +1257,7 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                 {/* Price */}
                 {billboard.price && (
                   <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-8">
-                    <h3 className="text-xl font-semibold mb-2 text-green-800">Стоимость аренды</h3>
+                    <h3 className="text-xl font-semibold mb-2 text-green-800">Rental Cost</h3>
                     <p className="text-3xl font-bold text-green-600">{billboard.price}</p>
                   </div>
                 )}
