@@ -18,6 +18,7 @@ import {
   AlertCircle,
   Monitor,
   Bus,
+  Wifi,
   WifiOff,
   Loader2,
   ChevronDown,
@@ -25,26 +26,16 @@ import {
   Phone,
   Mail,
   FileText,
-  Filter,
-  Search,
-  Users,
-  CheckCircle,
-  Clock,
-  XCircle,
-  Settings,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiService, type Billboard, type Category } from "@/lib/api"
 
 // Обновляем компонент Dashboard
 export default function Dashboard() {
   const [billboards, setBillboards] = useState<Billboard[]>([])
-  const [filteredBillboards, setFilteredBillboards] = useState<Billboard[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedBillboard, setSelectedBillboard] = useState<Billboard | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -55,12 +46,6 @@ export default function Dashboard() {
   const [nextPage, setNextPage] = useState<number | null>(null)
   const [totalCount, setTotalCount] = useState<number>(0)
 
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState<string>("")
-  const [selectedStatus, setSelectedStatus] = useState<string>("all")
-  const [selectedEmployee, setSelectedEmployee] = useState<string>("all")
-  const [employees, setEmployees] = useState<Array<{ id: number; full_name: string; email: string }>>([])
-
   useEffect(() => {
     loadDataFromApi()
   }, [])
@@ -70,11 +55,6 @@ export default function Dashboard() {
       loadBillboards(activeCategory)
     }
   }, [activeCategory])
-
-  // Filter effect
-  useEffect(() => {
-    applyFilters()
-  }, [billboards, searchQuery, selectedStatus, selectedEmployee])
 
   const loadDataFromApi = async () => {
     try {
@@ -87,15 +67,14 @@ export default function Dashboard() {
       const healthCheck = await apiService.checkApiHealth()
       setApiStatus(healthCheck)
 
-      // Загружаем категории и сотрудников
-      const [categoriesData, employeesData] = await Promise.all([apiService.getCategories(), apiService.getEmployees()])
+      // Загружаем категории (теперь с fallback на mock данные)
+      const categoriesData = await apiService.getCategories()
 
       if (!categoriesData || categoriesData.length === 0) {
         throw new Error("Не удалось получить категории")
       }
 
       setCategories(categoriesData)
-      setEmployees(employeesData)
       console.log("📂 Категории загружены:", categoriesData)
 
       // Устанавливаем первую категорию как активную
@@ -140,26 +119,27 @@ export default function Dashboard() {
 
       console.log(`📋 Загружаем билборды для категории: ${categorySlug}, страница: ${page}`)
 
-      // Исправляем вызов API - он возвращает массив напрямую
-      const data = await apiService.getBillboards({
+      const {
+        billboards: data,
+        nextPage: next,
+        totalCount: count,
+      } = await apiService.getBillboards({
         category: categorySlug,
         page: page,
       })
 
-      // Проверяем, что data это массив
-      const billboardsArray = Array.isArray(data) ? data : []
-
       if (page === 1) {
-        setBillboards(billboardsArray)
+        setBillboards(data)
       } else {
-        setBillboards((prev) => [...prev, ...billboardsArray])
+        setBillboards((prev) => [...prev, ...data])
       }
 
-      // Для простоты устанавливаем nextPage как null, так как API не возвращает информацию о пагинации
-      setNextPage(null)
-      setTotalCount(billboardsArray.length)
+      setNextPage(next)
+      setTotalCount(count)
 
-      console.log(`✅ Успешно загружено ${billboardsArray.length} билбордов для категории ${categorySlug}`)
+      console.log(
+        `✅ Успешно загружено ${data.length} билбордов для категории ${categorySlug}. Всего: ${count}, следующая страница: ${next}`,
+      )
     } catch (error) {
       console.error("❌ Ошибка загрузки билбордов:", error)
       setError(`Не удалось загрузить билборды: ${error}`)
@@ -170,51 +150,6 @@ export default function Dashboard() {
       setIsLoading(false)
       setIsLoadingMore(false)
     }
-  }
-
-  const applyFilters = () => {
-    let filtered = [...billboards]
-
-    // Search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(
-        (billboard) =>
-          billboard.title?.toLowerCase().includes(query) ||
-          billboard.address?.toLowerCase().includes(query) ||
-          billboard.employee?.toLowerCase().includes(query) ||
-          billboard.description?.toLowerCase().includes(query),
-      )
-    }
-
-    // Status filter
-    if (selectedStatus !== "all") {
-      filtered = filtered.filter((billboard) => billboard.status === selectedStatus)
-    }
-
-    // Employee filter
-    if (selectedEmployee !== "all") {
-      const employeeName = employees.find((emp) => emp.id.toString() === selectedEmployee)?.full_name
-      if (employeeName) {
-        filtered = filtered.filter((billboard) => billboard.employee === employeeName)
-      }
-    }
-
-    setFilteredBillboards(filtered)
-  }
-
-  const clearAllFilters = () => {
-    setSearchQuery("")
-    setSelectedStatus("all")
-    setSelectedEmployee("all")
-  }
-
-  const getActiveFiltersCount = () => {
-    let count = 0
-    if (searchQuery.trim()) count++
-    if (selectedStatus !== "all") count++
-    if (selectedEmployee !== "all") count++
-    return count
   }
 
   const loadMoreBillboards = () => {
@@ -233,8 +168,6 @@ export default function Dashboard() {
 
   const handleCategoryChange = (categorySlug: string) => {
     setActiveCategory(categorySlug)
-    // Reset filters when changing category
-    clearAllFilters()
   }
 
   const handleRefresh = () => {
@@ -250,21 +183,6 @@ export default function Dashboard() {
         return <Bus className="h-4 w-4" />
       default:
         return <Monitor className="h-4 w-4" />
-    }
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "active":
-        return <CheckCircle className="h-4 w-4" />
-      case "pending":
-        return <Clock className="h-4 w-4" />
-      case "expired":
-        return <XCircle className="h-4 w-4" />
-      case "maintenance":
-        return <Settings className="h-4 w-4" />
-      default:
-        return <CheckCircle className="h-4 w-4" />
     }
   }
 
@@ -299,22 +217,21 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Sticky Header with Filters */}
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
-        <div className="container mx-auto px-4 py-6">
-          {/* Title and Refresh */}
+      {/* Main Content */}
+      <section className="container mx-auto px-4 py-8">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }} className="mb-8">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Рекламные конструкции</h1>
-              <p className="text-gray-600">Управление билбордами и остановками</p>
+              <h2 className="text-3xl font-bold mb-2">Рекламные конструкции</h2>
             </div>
-            <Button onClick={handleRefresh} variant="outline" className="flex items-center space-x-2 bg-transparent">
+            <Button onClick={handleRefresh} variant="outline" className="flex items-center space-x-2">
               <RefreshCw className="h-4 w-4" />
               <span>Обновить</span>
             </Button>
           </div>
 
-          {/* API Status */}
+
+
           {apiStatus?.status === "error" && (
             <motion.div
               initial={{ opacity: 0, y: -20 }}
@@ -329,217 +246,23 @@ export default function Dashboard() {
             </motion.div>
           )}
 
-          {/* Filters Section */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Filter className="h-5 w-5 text-blue-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900">Фильтры и поиск</h3>
-                {getActiveFiltersCount() > 0 && (
-                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                    {getActiveFiltersCount()} активных
-                  </Badge>
-                )}
-              </div>
-              {getActiveFiltersCount() > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearAllFilters}
-                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  Сбросить все
-                </Button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Search */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center space-x-2">
-                  <Search className="h-4 w-4 text-gray-500" />
-                  <span>Поиск</span>
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Поиск по названию, адресу..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 bg-white border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                  />
-                </div>
-              </div>
-
-              {/* Status Filter */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center space-x-2">
-                  <CheckCircle className="h-4 w-4 text-gray-500" />
-                  <span>Статус</span>
-                </label>
-                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                  <SelectTrigger className="bg-white border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">
-                      <div className="flex items-center space-x-2">
-                        <Filter className="h-4 w-4 text-gray-500" />
-                        <span>Все статусы</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="active">
-                      <div className="flex items-center space-x-2">
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                        <span>Активен</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="pending">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="h-4 w-4 text-yellow-500" />
-                        <span>Ожидание</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="expired">
-                      <div className="flex items-center space-x-2">
-                        <XCircle className="h-4 w-4 text-red-500" />
-                        <span>Истёк</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="maintenance">
-                      <div className="flex items-center space-x-2">
-                        <Settings className="h-4 w-4 text-blue-500" />
-                        <span>Обслуживание</span>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Employee Filter */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center space-x-2">
-                  <Users className="h-4 w-4 text-gray-500" />
-                  <span>Ответственный</span>
-                </label>
-                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                  <SelectTrigger className="bg-white border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">
-                      <div className="flex items-center space-x-2">
-                        <Users className="h-4 w-4 text-gray-500" />
-                        <span>Все сотрудники</span>
-                      </div>
-                    </SelectItem>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id.toString()}>
-                        <div className="flex items-center space-x-2">
-                          <User className="h-4 w-4 text-gray-500" />
-                          <span>{employee.full_name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Results Counter */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Результаты</label>
-                <div className="bg-white border border-gray-200 rounded-md px-3 py-2 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-blue-600">{filteredBillboards.length}</div>
-                    <div className="text-xs text-gray-500">из {billboards.length}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Active Filters Display */}
-            {getActiveFiltersCount() > 0 && (
-              <div className="mt-4 pt-4 border-t border-blue-200">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm text-gray-600">Активные фильтры:</span>
-                  {searchQuery.trim() && (
-                    <Badge
-                      variant="secondary"
-                      className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer"
-                      onClick={() => setSearchQuery("")}
-                    >
-                      Поиск: "{searchQuery}"
-                      <X className="h-3 w-3 ml-1" />
-                    </Badge>
-                  )}
-                  {selectedStatus !== "all" && (
-                    <Badge
-                      variant="secondary"
-                      className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer"
-                      onClick={() => setSelectedStatus("all")}
-                    >
-                      {getStatusIcon(selectedStatus)}
-                      <span className="ml-1">
-                        {selectedStatus === "active" && "Активен"}
-                        {selectedStatus === "pending" && "Ожидание"}
-                        {selectedStatus === "expired" && "Истёк"}
-                        {selectedStatus === "maintenance" && "Обслуживание"}
-                      </span>
-                      <X className="h-3 w-3 ml-1" />
-                    </Badge>
-                  )}
-                  {selectedEmployee !== "all" && (
-                    <Badge
-                      variant="secondary"
-                      className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer"
-                      onClick={() => setSelectedEmployee("all")}
-                    >
-                      <User className="h-3 w-3 mr-1" />
-                      {employees.find((emp) => emp.id.toString() === selectedEmployee)?.full_name}
-                      <X className="h-3 w-3 ml-1" />
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Category Tabs */}
           {categories.length > 0 && (
-            <div className="mt-6">
-              <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-3 gap-2 bg-white">
-                  {categories.map((category) => (
-                    <TabsTrigger
-                      key={category.slug}
-                      value={category.slug}
-                      className="flex items-center space-x-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
-                    >
-                      {getIconComponent(category.icon)}
-                      <span>{category.name}</span>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <section className="container mx-auto px-4 py-8">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }}>
-          {categories.length > 0 && (
             <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
+              <TabsList className="grid w-full grid-cols-3 gap-2">
+                {categories.map((category) => (
+                  <TabsTrigger key={category.slug} value={category.slug} className="flex items-center space-x-2">
+                    {getIconComponent(category.icon)}
+                    <span>{category.name}</span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
               {categories.map((category) => (
-                <TabsContent key={category.slug} value={category.slug} className="mt-0">
+                <TabsContent key={category.slug} value={category.slug} className="mt-6">
                   <CategoryContent
                     category={category}
-                    billboards={filteredBillboards}
-                    allBillboards={billboards}
+                    billboards={billboards}
                     isLoading={isLoading}
                     isLoadingMore={isLoadingMore}
                     error={error}
@@ -547,7 +270,6 @@ export default function Dashboard() {
                     onLoadMore={loadMoreBillboards}
                     hasMore={nextPage !== null}
                     totalCount={totalCount}
-                    isFiltered={getActiveFiltersCount() > 0}
                   />
                 </TabsContent>
               ))}
@@ -566,7 +288,6 @@ export default function Dashboard() {
 interface CategoryContentProps {
   category: Category
   billboards: Billboard[]
-  allBillboards: Billboard[]
   isLoading: boolean
   isLoadingMore: boolean
   error: string | null
@@ -574,14 +295,12 @@ interface CategoryContentProps {
   onLoadMore: () => void
   hasMore: boolean
   totalCount: number
-  isFiltered: boolean
 }
 
 // Обновляем компонент CategoryContent
 function CategoryContent({
   category,
   billboards,
-  allBillboards,
   isLoading,
   isLoadingMore,
   error,
@@ -589,7 +308,6 @@ function CategoryContent({
   onLoadMore,
   hasMore,
   totalCount,
-  isFiltered,
 }: CategoryContentProps) {
   return (
     <div>
@@ -598,32 +316,9 @@ function CategoryContent({
           {category.name}
         </h3>
         <p className="text-gray-600">{category.description}</p>
-        <div className="flex items-center space-x-4 mt-2">
-          <p className="text-sm text-gray-500">
-            {isFiltered ? (
-              <>
-                Найдено: <span className="font-medium text-blue-600">{billboards.length}</span> из{" "}
-                <span className="font-medium">{allBillboards.length}</span> загруженных
-              </>
-            ) : (
-              <>
-                Показано: <span className="font-medium">{allBillboards.length}</span>
-                {totalCount > allBillboards.length && (
-                  <>
-                    {" "}
-                    из <span className="font-medium">{totalCount}</span>
-                  </>
-                )}
-              </>
-            )}
-          </p>
-          {isFiltered && (
-            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-              <Filter className="h-3 w-3 mr-1" />
-              Фильтры активны
-            </Badge>
-          )}
-        </div>
+        <p className="text-sm text-gray-500 mt-1">
+          Показано: {billboards.length} из {totalCount}
+        </p>
       </div>
 
       {/* Error Message */}
@@ -649,14 +344,8 @@ function CategoryContent({
       ) : billboards.length === 0 ? (
         <div className="text-center py-16">
           <div className="text-gray-400 text-6xl mb-4">{category.icon === "bus" ? "🚌" : "📋"}</div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            {isFiltered ? "Ничего не найдено" : `Нет ${category.name.toLowerCase()}`}
-          </h3>
-          <p className="text-gray-600">
-            {isFiltered
-              ? "Попробуйте изменить параметры поиска или сбросить фильтры"
-              : "API не вернул данные для этой категории или они еще не добавлены"}
-          </p>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Нет {category.name.toLowerCase()}</h3>
+          <p className="text-gray-600">API не вернул данные для этой категории или они еще не добавлены</p>
         </div>
       ) : (
         <>
@@ -671,15 +360,15 @@ function CategoryContent({
             ))}
           </div>
 
-          {/* Load More Button - только если нет активных фильтров и есть еще данные */}
-          {!isFiltered && hasMore && allBillboards.length > 0 && (
+          {/* Load More Button */}
+          {hasMore && (
             <div className="mt-10 text-center">
               <Button
                 onClick={onLoadMore}
                 disabled={isLoadingMore}
                 variant="outline"
                 size="lg"
-                className="px-8 py-6 text-lg bg-transparent"
+                className="px-8 py-6 text-lg"
               >
                 {isLoadingMore ? (
                   <>
@@ -693,7 +382,9 @@ function CategoryContent({
                   </>
                 )}
               </Button>
-              <p className="text-sm text-gray-500 mt-2">Показано {allBillboards.length}</p>
+              <p className="text-sm text-gray-500 mt-2">
+                Показано {billboards.length} из {totalCount}
+              </p>
             </div>
           )}
         </>
@@ -867,9 +558,8 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
                         <button
                           key={idx}
                           onClick={(e) => setImageIndex(e, idx)}
-                          className={`w-2 h-2 rounded-full transition-colors ${
-                            idx === currentImageIndex ? "bg-white" : "bg-white/50"
-                          }`}
+                          className={`w-2 h-2 rounded-full transition-colors ${idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                            }`}
                         />
                       ))}
                     </div>
@@ -928,7 +618,7 @@ function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps)
               </div>
 
               <div className="mt-4 pt-4 border-t border-gray-100 shrink-0">
-                <Button variant="outline" className="w-full bg-transparent" onClick={onDetailsClick}>
+                <Button variant="outline" className="w-full" onClick={onDetailsClick}>
                   Подробнее
                 </Button>
               </div>
@@ -1158,9 +848,8 @@ function BillboardModal({ billboard, onClose }: BillboardModalProps) {
                               <button
                                 key={idx}
                                 onClick={(e) => setImageIndex(e, idx)}
-                                className={`w-3 h-3 rounded-full transition-colors ${
-                                  idx === currentImageIndex ? "bg-white" : "bg-white/50"
-                                }`}
+                                className={`w-3 h-3 rounded-full transition-colors ${idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                                  }`}
                               />
                             ))}
                           </div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus, Edit, Trash2, Save, X, MapPin, User, Calendar, Maximize2, RefreshCw, Monitor, Bus } from "lucide-react"
+import { Plus, Edit, Trash2, Save, X, MapPin, User, Calendar, Maximize2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -58,7 +58,6 @@ export default function AdminPanel() {
       location: { lat: 41.2995, lng: 69.2401 },
       period: "",
       status: "pending",
-      category: 1, // Добавлено значение по умолчанию
       title: "",
       description: "",
     })
@@ -68,7 +67,7 @@ export default function AdminPanel() {
     setEditingBillboard(billboard)
     setFormData({
       ...billboard,
-      employee: billboard.employee,
+      employee: billboard.employee, // Это уже строка с именем
     })
   }
 
@@ -83,7 +82,7 @@ export default function AdminPanel() {
       }
 
       setFormData({})
-      await loadData()
+      await loadData() // Перезагружаем данные
     } catch (error) {
       console.error("Failed to save billboard:", error)
       setError("Не удалось сохранить билборд")
@@ -94,7 +93,7 @@ export default function AdminPanel() {
     if (confirm("Вы уверены, что хотите удалить этот билборд?")) {
       try {
         await apiService.deleteBillboard(id)
-        await loadData()
+        await loadData() // Перезагружаем данные
       } catch (error) {
         console.error("Failed to delete billboard:", error)
         setError("Не удалось удалить билборд")
@@ -159,23 +158,6 @@ export default function AdminPanel() {
     }
   }
 
-  const getCategoryColor = (category_data?: any) => {
-    if (category_data?.slug === "billboard") {
-      return "bg-blue-100 text-blue-800"
-    } else if (category_data?.slug === "bus_stop") {
-      return "bg-green-100 text-green-800"
-    }
-    return "bg-gray-100 text-gray-800"
-  }
-
-  const getCategoryText = (category_data?: any) => {
-    return category_data?.name || "Неизвестно"
-  }
-
-  const getCategoryIcon = (category_data?: any) => {
-    return category_data?.icon === "bus" ? <Bus className="h-4 w-4" /> : <Monitor className="h-4 w-4" />
-  }
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -195,7 +177,7 @@ export default function AdminPanel() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Админ-панель</h1>
-              <p className="text-gray-600 mt-1">Управление билбордами и рекламой на остановках</p>
+              <p className="text-gray-600 mt-1">Управление билбордами</p>
             </div>
             <div className="flex space-x-4">
               <Button onClick={loadData} variant="outline" className="flex items-center space-x-2">
@@ -204,7 +186,7 @@ export default function AdminPanel() {
               </Button>
               <Button onClick={handleCreate} className="flex items-center space-x-2">
                 <Plus className="h-4 w-4" />
-                <span>Добавить</span>
+                <span>Добавить билборд</span>
               </Button>
             </div>
           </div>
@@ -222,44 +204,16 @@ export default function AdminPanel() {
       <div className="container mx-auto px-4 py-8">
         {/* Stats */}
         {statistics && (
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Всего</p>
+                    <p className="text-sm text-gray-600">Всего билбордов</p>
                     <p className="text-2xl font-bold">{statistics.total}</p>
                   </div>
                   <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
                     <MapPin className="h-6 w-6 text-blue-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Билборды</p>
-                    <p className="text-2xl font-bold text-blue-600">{statistics.categories?.billboard || 0}</p>
-                  </div>
-                  <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Monitor className="h-6 w-6 text-blue-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Остановки</p>
-                    <p className="text-2xl font-bold text-green-600">{statistics.categories?.bus_stop || 0}</p>
-                  </div>
-                  <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <Bus className="h-6 w-6 text-green-600" />
                   </div>
                 </div>
               </CardContent>
@@ -312,7 +266,7 @@ export default function AdminPanel() {
         {/* Billboards Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Список рекламных конструкций</CardTitle>
+            <CardTitle>Список билбордов</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -324,25 +278,14 @@ export default function AdminPanel() {
                   className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-6 gap-4">
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4">
                       <div>
                         <p className="text-sm text-gray-500">ID</p>
                         <p className="font-medium">#{billboard.id}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">Категория</p>
-                        <div className="flex items-center space-x-2">
-                          {getCategoryIcon(billboard.category_data)}
-                          <Badge className={getCategoryColor(billboard.category_data)}>
-                            {getCategoryText(billboard.category_data)}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div>
                         <p className="text-sm text-gray-500">Название</p>
-                        <p className="font-medium">
-                          {billboard.title || `${getCategoryText(billboard.category_data)} #${billboard.id}`}
-                        </p>
+                        <p className="font-medium">{billboard.title || `Билборд #${billboard.id}`}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-500">Сотрудник</p>
@@ -398,9 +341,7 @@ export default function AdminPanel() {
               <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="p-6">
                   <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold">
-                      {isCreating ? "Добавить рекламную конструкцию" : "Редактировать"}
-                    </h2>
+                    <h2 className="text-2xl font-bold">{isCreating ? "Добавить билборд" : "Редактировать билборд"}</h2>
                     <Button variant="outline" size="sm" onClick={handleCancel}>
                       <X className="h-4 w-4" />
                     </Button>
@@ -414,7 +355,7 @@ export default function AdminPanel() {
                         id="title"
                         value={formData.title || ""}
                         onChange={(e) => updateFormData("title", e.target.value)}
-                        placeholder="Название рекламной конструкции"
+                        placeholder="Название билборда"
                       />
                     </div>
 
@@ -429,14 +370,14 @@ export default function AdminPanel() {
                       />
                     </div>
 
-                    {/* Size - обновлен placeholder для отражения нового формата */}
+                    {/* Size */}
                     <div>
-                      <Label htmlFor="size">Размер (ВxШ м)</Label>
+                      <Label htmlFor="size">Размер</Label>
                       <Input
                         id="size"
                         value={formData.size || ""}
                         onChange={(e) => updateFormData("size", e.target.value)}
-                        placeholder="6x3 м (высота x ширина)"
+                        placeholder="3x6 м"
                       />
                     </div>
 
@@ -447,7 +388,7 @@ export default function AdminPanel() {
                         id="address"
                         value={formData.address || ""}
                         onChange={(e) => updateFormData("address", e.target.value)}
-                        placeholder="Полный адрес"
+                        placeholder="Полный адрес билборда"
                         rows={2}
                       />
                     </div>
@@ -512,7 +453,7 @@ export default function AdminPanel() {
                         id="description"
                         value={formData.description || ""}
                         onChange={(e) => updateFormData("description", e.target.value)}
-                        placeholder="Подробное описание"
+                        placeholder="Подробное описание билборда"
                         rows={3}
                       />
                     </div>
