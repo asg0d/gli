@@ -53,8 +53,9 @@ export default function Dashboard() {
   const [apiStatus, setApiStatus] = useState<{ status: string; message: string } | null>(null)
   const [nextPage, setNextPage] = useState<number | null>(null)
   const [totalCount, setTotalCount] = useState<number>(0)
-  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [isFilterOpen, setIsFilterOpen] = useState(false) // New state for filter visibility
 
+  // Filter states
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [selectedStatus, setSelectedStatus] = useState<string>("all")
   const [selectedEmployee, setSelectedEmployee] = useState<string>("all")
@@ -70,6 +71,7 @@ export default function Dashboard() {
     }
   }, [activeCategory])
 
+  // Filter effect
   useEffect(() => {
     applyFilters()
   }, [billboards, searchQuery, selectedStatus, selectedEmployee])
@@ -78,8 +80,14 @@ export default function Dashboard() {
     try {
       setIsLoading(true)
       setError(null)
+
+      console.log("🚀 Starting data loading...")
+
+      // Check API health
       const healthCheck = await apiService.checkApiHealth()
       setApiStatus(healthCheck)
+
+      // Load categories and employees
       const [categoriesData, employeesData] = await Promise.all([apiService.getCategories(), apiService.getEmployees()])
 
       if (!categoriesData || categoriesData.length === 0) {
@@ -88,17 +96,25 @@ export default function Dashboard() {
 
       setCategories(categoriesData)
       setEmployees(employeesData)
+      console.log("📂 Categories loaded:", categoriesData)
+
+      // Set the first category as active
       if (categoriesData.length > 0) {
         setActiveCategory(categoriesData[0].slug)
       }
 
+      // Handle API unavailable case
       if (healthCheck.status === "error") {
         setError("API unavailable, displaying demo data")
+      } else {
+        setError(null)
       }
     } catch (error) {
       console.error("❌ Error loading data:", error)
       setError(`Error: ${error}`)
       setApiStatus({ status: "error", message: String(error) })
+
+      // Fallback to mock data
       try {
         const mockCategories = await apiService.getCategories()
         setCategories(mockCategories)
@@ -122,6 +138,8 @@ export default function Dashboard() {
         setIsLoadingMore(true)
       }
 
+      console.log(`📋 Loading billboards for category: ${categorySlug}, page: ${page}`)
+
       const { billboards: billboardsArray, nextPage, totalCount } = await apiService.getBillboards({
         category: categorySlug,
         page: page,
@@ -130,6 +148,8 @@ export default function Dashboard() {
       setBillboards(page === 1 ? billboardsArray : [...billboards, ...billboardsArray])
       setNextPage(nextPage)
       setTotalCount(totalCount)
+
+      console.log(`✅ Successfully loaded ${billboardsArray.length} billboards for category ${categorySlug}`)
     } catch (error) {
       console.error("❌ Error loading billboards:", error)
       setError(`Failed to load billboards: ${error}`)
@@ -144,6 +164,8 @@ export default function Dashboard() {
 
   const applyFilters = () => {
     let filtered = [...billboards]
+
+    // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(
@@ -154,12 +176,17 @@ export default function Dashboard() {
           billboard.description?.toLowerCase().includes(query),
       )
     }
+
+    // Status filter
     if (selectedStatus !== "all") {
       filtered = filtered.filter((billboard) => billboard.status === selectedStatus)
     }
+
+    // Employee filter
     if (selectedEmployee !== "all") {
       filtered = filtered.filter((billboard) => billboard.employee_id?.toString() === selectedEmployee)
     }
+
     setFilteredBillboards(filtered)
   }
 
@@ -191,21 +218,21 @@ export default function Dashboard() {
     setSelectedBillboard(null)
   }
 
-  const handleRefresh = () => {
-    if (activeCategory) {
-      loadBillboards(activeCategory)
-    }
+  const handleCategoryChange = (categorySlug: string) => {
+    setActiveCategory(categorySlug)
+    clearAllFilters()
   }
 
-  const handleCategoryChange = (value: string) => {
-    setActiveCategory(value)
+  const handleRefresh = () => {
+    console.log("🔄 Refreshing data...")
+    loadDataFromApi()
   }
 
   const toggleFilter = () => {
-    setIsFilterOpen(!isFilterOpen)
+    setIsFilterOpen((prev) => !prev)
   }
 
-  const getBillboardIcon = (iconName?: string) => {
+  const getIconComponent = (iconName?: string) => {
     switch (iconName) {
       case "monitor":
         return <Monitor className="h-4 w-4" />
@@ -233,166 +260,345 @@ export default function Dashboard() {
 
   if (isLoading && categories.length === 0) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-slate-900 mx-auto mb-4 opacity-20" />
-          <p className="text-slate-400 font-medium tracking-tight">Syncing with GLI Infrastructure</p>
+          <Loader2 className="h-16 w-16 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600 text-lg">Loading data from API...</p>
+          <p className="text-sm text-gray-500 mt-2">api.location.utu-ranch.uz</p>
+          {apiStatus && <p className="text-xs text-gray-400 mt-1">Status: {apiStatus.message}</p>}
+        </div>
+      </div>
+    )
+  }
+
+  if (error && categories.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <WifiOff className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">API Connection Error</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={handleRefresh} className="flex items-center space-x-2">
+            <RefreshCw className="h-4 w-4" />
+            <span>Try Again</span>
+          </Button>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 shadow-sm transition-all duration-300">
-        <div className="container mx-auto px-4 py-6 md:py-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between mb-8">
-            <div className="space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Inventory Management</p>
-              <h1 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tighter">
-                Structures
-              </h1>
-              <p className="text-slate-500 font-medium">Monitoring GLI advertising assets in real-time</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Sticky Header with Filters */}
+      <div className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
+        <div className="container mx-auto px-4 py-6">
+          {/* Title, Refresh, and Filter Toggle */}
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Advertising Structures</h1>
+              <p className="text-gray-600">Manage billboards and bus stops</p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center space-x-4">
               <Button
                 onClick={handleRefresh}
                 variant="outline"
-                className="h-11 px-5 flex items-center justify-center space-x-2 bg-white shadow-sm border-slate-200 hover:border-slate-300 rounded-xl transition-all active:scale-95"
+                className="flex items-center space-x-2 bg-transparent"
               >
-                <RefreshCw className="h-4 w-4 text-slate-600" />
-                <span className="font-semibold text-slate-700">Refresh</span>
+                <RefreshCw className="h-4 w-4" />
+                <span>Refresh</span>
               </Button>
               <Button
                 onClick={toggleFilter}
                 variant="outline"
-                className={`h-11 px-5 flex items-center justify-center space-x-2 rounded-xl transition-all active:scale-95 ${
-                  isFilterOpen ? "bg-slate-900 text-white border-slate-900 hover:bg-slate-800" : "bg-white shadow-sm border-slate-200 hover:border-slate-300 text-slate-700"
-                }`}
+                className="flex items-center space-x-2 bg-transparent"
               >
                 <Filter className="h-4 w-4" />
-                <span className="font-semibold">Filters</span>
-                {isFilterOpen ? <ChevronUp className="h-4 w-4 opacity-50" /> : <ChevronDown className="h-4 w-4 opacity-50" />}
+                <span>Filters</span>
+                {isFilterOpen ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </div>
 
+          {/* API Status */}
+          {apiStatus?.status === "error" && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center space-x-3"
+            >
+              <WifiOff className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+              <div>
+                <p className="text-yellow-800 font-medium">API Unavailable</p>
+                <p className="text-yellow-700 text-sm">Displaying demo data. {apiStatus.message}</p>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Collapsible Filters Section */}
           <AnimatePresence>
             {isFilterOpen && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
                 className="overflow-hidden"
+                // Optional: Uncomment for hover support
+                // onMouseEnter={() => setIsFilterOpen(true)}
+                // onMouseLeave={() => setIsFilterOpen(false)}
               >
-                <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-200/60 mb-8">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Filter className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900">Filters and Search</h3>
+                      {getActiveFiltersCount() > 0 && (
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                          {getActiveFiltersCount()} active
+                        </Badge>
+                      )}
+                    </div>
+                    {getActiveFiltersCount() > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearAllFilters}
+                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Clear All
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Search */}
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Search Assets</label>
-                      <div className="relative group">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-slate-900 transition-colors" />
+                      <label className="text-sm font-medium text-gray-700 flex items-center space-x-2">
+                        <Search className="h-4 w-4 text-gray-500" />
+                        <span>Search</span>
+                      </label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <Input
-                          placeholder="Search by ID or address..."
+                          placeholder="Search by title, address..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          className="h-12 pl-11 bg-white border-slate-200 rounded-xl focus:ring-4 focus:ring-slate-900/5 focus:border-slate-400 transition-all shadow-sm"
+                          className="pl-10 bg-white border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                         />
                       </div>
                     </div>
 
+                    {/* Status Filter */}
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Asset Status</label>
+                      <label className="text-sm font-medium text-gray-700 flex items-center space-x-2">
+                        <CheckCircle className="h-4 w-4 text-gray-500" />
+                        <span>Status</span>
+                      </label>
                       <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                        <SelectTrigger className="h-12 bg-white border-slate-200 rounded-xl focus:ring-4 focus:ring-slate-900/5 shadow-sm">
+                        <SelectTrigger className="bg-white border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="rounded-xl border-slate-200">
-                          <SelectItem value="all">All Statuses</SelectItem>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="expired">Expired</SelectItem>
-                          <SelectItem value="maintenance">Maintenance</SelectItem>
+                        <SelectContent>
+                          <SelectItem value="all">
+                            <div className="flex items-center space-x-2">
+                              <Filter className="h-4 w-4 text-gray-500" />
+                              <span>All statuses</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="active">
+                            <div className="flex items-center space-x-2">
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                              <span>Active</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="pending">
+                            <div className="flex items-center space-x-2">
+                              <Clock className="h-4 w-4 text-yellow-500" />
+                              <span>Pending</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="expired">
+                            <div className="flex items-center space-x-2">
+                              <XCircle className="h-4 w-4 text-red-500" />
+                              <span>Expired</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="maintenance">
+                            <div className="flex items-center space-x-2">
+                              <Settings className="h-4 w-4 text-blue-500" />
+                              <span>Maintenance</span>
+                            </div>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
+                    {/* Employee Filter */}
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Responsible</label>
+                      <label className="text-sm font-medium text-gray-700 flex items-center space-x-2">
+                        <Users className="h-4 w-4 text-gray-500" />
+                        <span>Responsible</span>
+                      </label>
                       <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                        <SelectTrigger className="h-12 bg-white border-slate-200 rounded-xl focus:ring-4 focus:ring-slate-900/5 shadow-sm">
+                        <SelectTrigger className="bg-white border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="rounded-xl border-slate-200">
-                          <SelectItem value="all">Everyone</SelectItem>
-                          {employees.map((emp) => (
-                            <SelectItem key={emp.id} value={emp.id.toString()}>{emp.full_name}</SelectItem>
+                        <SelectContent>
+                          <SelectItem value="all">
+                            <div className="flex items-center space-x-2">
+                              <Users className="h-4 w-4 text-gray-500" />
+                              <span>All employees</span>
+                            </div>
+                          </SelectItem>
+                          {employees.map((employee) => (
+                            <SelectItem key={employee.id} value={employee.id.toString()}>
+                              <div className="flex items-center space-x-2">
+                                <User className="h-4 w-4 text-gray-500" />
+                                <span>{employee.full_name}</span>
+                              </div>
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
-                    <div className="flex items-end">
-                      <Button 
-                        variant="ghost" 
-                        onClick={clearAllFilters}
-                        className="h-12 w-full rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 font-semibold"
-                      >
-                        Reset All
-                      </Button>
+                    {/* Results Counter */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Results</label>
+                      <div className="bg-white border border-gray-200 rounded-md px-3 py-2 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-blue-600">{filteredBillboards.length}</div>
+                          <div className="text-xs text-gray-500">of {billboards.length}</div>
+                        </div>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Active Filters Display */}
+                  {getActiveFiltersCount() > 0 && (
+                    <div className="mt-4 pt-4 border-t border-blue-200">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm text-gray-600">Active filters:</span>
+                        {searchQuery.trim() && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer"
+                            onClick={() => setSearchQuery("")}
+                          >
+                            Search: "{searchQuery}"
+                            <X className="h-3 w-3 ml-1" />
+                          </Badge>
+                        )}
+                        {selectedStatus !== "all" && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer"
+                            onClick={() => setSelectedStatus("all")}
+                          >
+                            {getStatusIcon(selectedStatus)}
+                            <span className="ml-1">
+                              {selectedStatus === "active" && "Active"}
+                              {selectedStatus === "pending" && "Pending"}
+                              {selectedStatus === "expired" && "Expired"}
+                              {selectedStatus === "maintenance" && "Maintenance"}
+                            </span>
+                            <X className="h-3 w-3 ml-1" />
+                          </Badge>
+                        )}
+                        {selectedEmployee !== "all" && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer"
+                            onClick={() => setSelectedEmployee("all")}
+                          >
+                            <User className="h-3 w-3 mr-1" />
+                            {employees.find((emp) => emp.id.toString() === selectedEmployee)?.full_name}
+                            <X className="h-3 w-3 ml-1" />
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
 
+          {/* Category Tabs */}
           {categories.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-              {categories.map((category) => (
-                <button
-                  key={category.slug}
-                  onClick={() => handleCategoryChange(category.slug)}
-                  className={`h-11 px-6 rounded-full text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 border-2 ${
-                    activeCategory === category.slug
-                      ? "bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-200 scale-105"
-                      : "bg-white text-slate-500 border-slate-100 hover:border-slate-200 hover:text-slate-700"
-                  }`}
-                >
-                  {getBillboardIcon(category.icon)}
-                  {category.name}
-                </button>
-              ))}
+            <div className="mt-6">
+              <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
+                <TabsList className="grid w-full grid-cols-3 gap-2 bg-white">
+                  {categories.map((category) => (
+                    <TabsTrigger
+                      key={category.slug}
+                      value={category.slug}
+                      className="flex items-center space-x-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                    >
+                      {getIconComponent(category.icon)}
+                      <span>{category.name}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
             </div>
           )}
         </div>
       </div>
 
-      <section className="container mx-auto px-4 py-12 md:py-20">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          {categories.map((category) => (
-            activeCategory === category.slug && (
-              <CategoryContent
-                key={category.slug}
-                category={category}
-                billboards={filteredBillboards}
-                allBillboards={billboards}
-                isLoading={isLoading}
-                isLoadingMore={isLoadingMore}
-                error={error}
-                onBillboardClick={openBillboardModal}
-                onLoadMore={loadMoreBillboards}
-                hasMore={nextPage !== null}
-                totalCount={totalCount}
-                isFiltered={getActiveFiltersCount() > 0}
-              />
-            )
-          ))}
+      {/* Main Content */}
+      <section className="container mx-auto px-4 py-8">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }}>
+          {categories.length > 0 && (
+            <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
+              {categories.map((category) => (
+                <TabsContent key={category.slug} value={category.slug} className="mt-0">
+                  <CategoryContent
+                    category={category}
+                    billboards={filteredBillboards}
+                    allBillboards={billboards}
+                    isLoading={isLoading}
+                    isLoadingMore={isLoadingMore}
+                    error={error}
+                    onBillboardClick={openBillboardModal}
+                    onLoadMore={loadMoreBillboards}
+                    hasMore={nextPage !== null}
+                    totalCount={totalCount}
+                    isFiltered={getActiveFiltersCount() > 0}
+                  />
+                </TabsContent>
+              ))}
+            </Tabs>
+          )}
         </motion.div>
       </section>
 
+      {/* Billboard Detail Modal */}
       <BillboardModal billboard={selectedBillboard} onClose={closeBillboardModal} />
     </div>
   )
+}
+
+// CategoryContent component
+interface CategoryContentProps {
+  category: Category
+  billboards: Billboard[]
+  allBillboards: Billboard[]
+  isLoading: boolean
+  isLoadingMore: boolean
+  error: string | null
+  onBillboardClick: (billboard: Billboard) => void
+  onLoadMore: () => void
+  hasMore: boolean
+  totalCount: number
+  isFiltered: boolean
 }
 
 function CategoryContent({
@@ -407,169 +613,349 @@ function CategoryContent({
   hasMore,
   totalCount,
   isFiltered,
-}: any) {
+}: CategoryContentProps) {
   return (
-    <div className="space-y-12">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="space-y-2">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">{category.name}</h2>
-          <p className="text-slate-500 max-w-2xl font-medium leading-relaxed">{category.description}</p>
-        </div>
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm self-start">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-            {isFiltered ? `${billboards.length} Result Found` : `${totalCount || billboards.length} Assets Registered`}
-          </span>
+    <div>
+      <div className="mb-6">
+        <h3 className="text-2xl font-bold mb-2" style={{ color: category.color }}>
+          {category.name}
+        </h3>
+        <p className="text-gray-600">{category.description}</p>
+        <div className="flex items-center space-x-4 mt-2">
+          <p className="text-sm text-gray-500">
+            {isFiltered ? (
+              <>
+                Found: <span className="font-medium text-blue-600">{billboards.length}</span> of{" "}
+                <span className="font-medium">{allBillboards.length}</span> loaded
+              </>
+            ) : (
+              <>
+                Shown: <span className="font-medium">{allBillboards.length}</span>
+                {totalCount > allBillboards.length && (
+                  <>
+                    {" "}
+                    of <span className="font-medium">{totalCount}</span>
+                  </>
+                )}
+              </>
+            )}
+          </p>
+          {isFiltered && (
+            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+              <Filter className="h-3 w-3 mr-1" />
+              Filters active
+            </Badge>
+          )}
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-[400px] bg-slate-100 rounded-3xl animate-pulse" />
-          ))}
-        </div>
-      ) : billboards.length === 0 ? (
-        <div className="text-center py-32 bg-white rounded-[3rem] border border-slate-100 shadow-sm">
-          <div className="text-6xl mb-6 grayscale opacity-20">📦</div>
-          <h3 className="text-xl font-bold text-slate-900 mb-2">No Assets Found</h3>
-          <p className="text-slate-500 max-w-xs mx-auto">Try refining your filters or search query to find what you're looking for.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-stretch">
-          {billboards.map((billboard: any, index: number) => (
-            <BillboardCard
-              key={billboard.id}
-              billboard={billboard}
-              index={index}
-              onDetailsClick={() => onBillboardClick(billboard)}
-            />
-          ))}
-        </div>
+      {/* Error Message */}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3"
+        >
+          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+          <div>
+            <p className="text-red-800 font-medium">Loading Error</p>
+            <p className="text-red-700 text-sm">{error}</p>
+          </div>
+        </motion.div>
       )}
 
-      {!isFiltered && hasMore && (
-        <div className="pt-10 text-center">
-          <Button
-            onClick={onLoadMore}
-            disabled={isLoadingMore}
-            variant="outline"
-            className="h-14 px-10 text-lg font-bold rounded-2xl bg-white border-slate-200 shadow-sm hover:border-slate-900 hover:bg-slate-900 hover:text-white transition-all group"
-          >
-            {isLoadingMore ? (
-              <Loader2 className="h-6 w-6 animate-spin" />
-            ) : (
-              <>
-                Load More Assets
-                <ChevronDown className="h-5 w-5 ml-2 group-hover:translate-y-1 transition-transform" />
-              </>
-            )}
-          </Button>
+      {isLoading ? (
+        <div className="text-center py-16">
+          <Loader2 className="h-16 w-16 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading {category.name.toLowerCase()} from API...</p>
         </div>
+      ) : billboards.length === 0 ? (
+        <div className="text-center py-16">
+          <div className="text-gray-400 text-6xl mb-4">{category.icon === "bus" ? "🚌" : "📋"}</div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            {isFiltered ? "Nothing found" : `No ${category.name.toLowerCase()}`}
+          </h3>
+          <p className="text-gray-600">
+            {isFiltered
+              ? "Try changing search parameters or clearing filters"
+              : "API returned no data for this category or it hasn't been added yet"}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
+            {billboards.map((billboard, index) => (
+              <BillboardCard
+                key={billboard.id}
+                billboard={billboard}
+                index={index}
+                onDetailsClick={() => onBillboardClick(billboard)}
+              />
+            ))}
+          </div>
+
+          {/* Load More Button */}
+          {!isFiltered && hasMore && allBillboards.length > 0 && (
+            <div className="mt-10 text-center">
+              <Button
+                onClick={onLoadMore}
+                disabled={isLoadingMore}
+                variant="outline"
+                size="lg"
+                className="px-8 py-6 text-lg bg-transparent"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-5 w-5 mr-2" />
+                    Load More
+                  </>
+                )}
+              </Button>
+              <p className="text-sm text-gray-500 mt-2">Shown {allBillboards.length}</p>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
 }
 
-function BillboardCard({ billboard, index, onDetailsClick }: any) {
-  const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const [ref, inView] = useInView({ triggerOnce: true, threshold: 0.1 })
+// Helper function to get billboard name
+function getBillboardName(billboard: Billboard): string {
+  if (!billboard) {
+    return "Unknown structure"
+  }
 
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case "active": return "bg-emerald-500"
-      case "pending": return "bg-amber-500"
-      case "expired": return "bg-rose-500"
-      case "maintenance": return "bg-sky-500"
-      default: return "bg-slate-500"
+  if (billboard.title && billboard.title.trim()) {
+    return billboard.title.trim()
+  }
+
+  const categoryName = billboard.category_data?.name || "Advertising structure"
+  return `${categoryName} #${billboard.id}`
+}
+
+// BillboardCard component
+interface BillboardCardProps {
+  billboard: Billboard
+  index: number
+  onDetailsClick: () => void
+}
+
+function BillboardCard({ billboard, index, onDetailsClick }: BillboardCardProps) {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const controls = useAnimation()
+  const [ref, inView] = useInView({
+    triggerOnce: true,
+    threshold: 0.1,
+  })
+
+  useEffect(() => {
+    if (inView) {
+      controls.start("visible")
+    }
+  }, [controls, inView])
+
+  const variants = {
+    hidden: { opacity: 0, y: 30 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.6,
+        delay: index * 0.1,
+        ease: "easeOut",
+      },
+    },
+  }
+
+  const nextImage = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (billboard.images && billboard.images.length > 1) {
+      setCurrentImageIndex((prev) => (prev + 1) % billboard.images.length)
     }
   }
 
-  const billboardName = billboard.title || `${billboard.category_data?.name || "Asset"} #${billboard.id}`
-  const currentImage = billboard.images?.[currentImageIndex] || "/placeholder.svg"
+  const prevImage = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (billboard.images && billboard.images.length > 1) {
+      setCurrentImageIndex((prev) => (prev - 1 + billboard.images.length) % billboard.images.length)
+    }
+  }
+
+  const setImageIndex = (e: React.MouseEvent, index: number) => {
+    e.stopPropagation()
+    setCurrentImageIndex(index)
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "active":
+        return "bg-green-100 text-green-800"
+      case "pending":
+        return "bg-yellow-100 text-yellow-800"
+      case "expired":
+        return "bg-red-100 text-red-800"
+      case "maintenance":
+        return "bg-blue-100 text-blue-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case "active":
+        return "Active"
+      case "pending":
+        return "Pending"
+      case "expired":
+        return "Expired"
+      case "maintenance":
+        return "Maintenance"
+      default:
+        return "Unknown"
+    }
+  }
+
+  const getIconComponent = (iconName?: string) => {
+    switch (iconName) {
+      case "monitor":
+        return <Monitor className="h-4 w-4" />
+      case "bus":
+        return <Bus className="h-4 w-4" />
+      default:
+        return <Monitor className="h-4 w-4" />
+    }
+  }
+
+  const currentImage =
+    billboard.images && billboard.images.length > 0
+      ? billboard.images[currentImageIndex]
+      : "/placeholder.svg?height=400&width=600"
+
+  const billboardName = getBillboardName(billboard)
 
   return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 30 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.6, delay: index * 0.1 }}
-      className="group h-full"
-    >
-      <Card className="h-full overflow-hidden border border-slate-200/60 rounded-[2.5rem] bg-white hover:shadow-[0_32px_64px_-12px_rgba(0,0,0,0.08)] transition-all duration-500 hover:-translate-y-2">
-        <CardContent className="p-0 h-full flex flex-col sm:flex-row">
-          <div className="relative w-full sm:w-1/2 h-72 sm:h-auto overflow-hidden">
-            <Image
-              src={currentImage}
-              alt={billboardName}
-              fill
-              className="object-cover transition-transform duration-700 group-hover:scale-110"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent opacity-60" />
-            
-            <div className="absolute top-5 left-5 right-5 flex justify-between items-start pointer-events-none">
-              <div className="px-3 py-1.5 bg-white/90 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl flex items-center gap-1.5 pointer-events-auto">
-                <div className={`w-2 h-2 rounded-full ${getStatusStyle(billboard.status)} animate-pulse`} />
-                {billboard.status}
-              </div>
-              <div className="px-3 py-1.5 bg-slate-900/40 backdrop-blur-md border border-white/20 rounded-full text-[10px] font-black text-white uppercase tracking-widest pointer-events-auto">
-                ID: {billboard.id}
+    <motion.div ref={ref} initial="hidden" animate={controls} variants={variants} className="h-full">
+      <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 bg-white h-full">
+        <CardContent className="p-0 h-full">
+          <div className="flex flex-col md:flex-row h-full">
+            {/* Images Section */}
+            <div className="md:w-1/2 relative">
+              <div className="relative h-64 md:h-80">
+                <Image
+                  src={currentImage}
+                  alt={`${billboardName} - photo ${currentImageIndex + 1}`}
+                  fill
+                  className="object-cover"
+                />
+
+                {/* Category Badge */}
+                <div
+                  className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm rounded-full px-3 py-1 flex items-center space-x-1"
+                  style={{ borderLeft: `3px solid ${billboard.category_data?.color || "#3b82f6"}` }}
+                >
+                  {getIconComponent(billboard.category_data?.icon)}
+                  <span className="text-xs font-medium">{billboard.category_data?.name || "Advertising"}</span>
+                </div>
+
+                {/* API Badge */}
+                <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full px-2 py-1">
+                  <span className="text-xs font-medium">API</span>
+                </div>
+
+                {/* Image Navigation */}
+                {billboard.images && billboard.images.length > 1 && (
+                  <>
+                    <button
+                      onClick={prevImage}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-colors z-10"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={nextImage}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-colors z-10"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+
+                    {/* Image Indicators */}
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex space-x-1 z-10">
+                      {billboard.images.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={(e) => setImageIndex(e, idx)}
+                          className={`w-2 h-2 rounded-full transition-colors ${
+                            idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
-            {billboard.images && billboard.images.length > 1 && (
-              <div className="absolute bottom-5 left-0 right-0 flex justify-center gap-1.5 px-5">
-                {billboard.images.slice(0, 5).map((_: any, idx: number) => (
-                  <button
-                    key={idx}
-                    onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(idx) }}
-                    className={`transition-all duration-300 h-1.5 rounded-full shadow-sm ${
-                      idx === currentImageIndex ? "w-6 bg-white" : "w-1.5 bg-white/40"
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="w-full sm:w-1/2 p-8 flex flex-col justify-between space-y-6">
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
-                  {billboard.category_data?.name || "Asset"}
-                </p>
-                <h3 className="text-2xl font-black text-slate-900 leading-[1.1] tracking-tight group-hover:text-slate-700 transition-colors line-clamp-2">
-                  {billboardName}
-                </h3>
-              </div>
-
-              <div className="space-y-3 pt-2">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-xl bg-slate-50 text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-900 transition-all">
-                    <MapPin className="h-4 w-4" />
+            {/* Info Section */}
+            <div className="md:w-1/2 p-6 flex flex-col justify-between h-full">
+              <div className="space-y-4 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-h-[3.5rem]">
+                    <h3 className="text-xl font-bold text-gray-900 line-clamp-2 leading-tight">{billboardName}</h3>
                   </div>
-                  <p className="text-sm font-semibold text-slate-600 line-clamp-2 leading-snug">{billboard.address || "Not specified"}</p>
+                  <Badge className={`${getStatusColor(billboard.status)} shrink-0 ml-2`}>
+                    {getStatusText(billboard.status)}
+                  </Badge>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-slate-50 text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-900 transition-all">
-                    <Maximize2 className="h-4 w-4" />
-                  </div>
-                  <p className="text-sm font-semibold text-slate-600">{billboard.size || "Not specified"}</p>
-                </div>
-              </div>
-            </div>
 
-            <div className="flex items-center justify-between gap-4 pt-4 border-t border-slate-50">
-              <div className="space-y-0.5">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Rate</p>
-                <p className="text-lg font-black text-slate-900 tracking-tight">{billboard.price || "N/A"}</p>
+                <div className="space-y-3 flex-1">
+                  <div className="flex items-center space-x-3">
+                    <User className="h-5 w-5 text-gray-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-gray-500">Responsible</p>
+                      <p className="font-medium truncate">{billboard.employee_name || "Not specified"}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <Maximize2 className="h-5 w-5 text-gray-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-gray-500">Size (HxW)</p>
+                      <p className="font-medium truncate">{billboard.size || "Not specified"}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <MapPin className="h-5 w-5 text-gray-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-gray-500">Address</p>
+                      <p className="font-medium line-clamp-2 text-sm leading-tight">
+                        {billboard.address || "Not specified"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <Calendar className="h-5 w-5 text-gray-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-gray-500">Rental Period</p>
+                      <p className="font-medium truncate text-sm">{billboard.period || "Not specified"}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <Button 
-                onClick={onDetailsClick}
-                className="h-12 px-6 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 shadow-xl shadow-slate-200 transition-all active:scale-95"
-              >
-                View
-              </Button>
+
+              <div className="mt-4 pt-4 border-t border-gray-100 shrink-0">
+                <Button variant="outline" className="w-full bg-transparent" onClick={onDetailsClick}>
+                  Details
+                </Button>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -578,198 +964,308 @@ function BillboardCard({ billboard, index, onDetailsClick }: any) {
   )
 }
 
-function BillboardModal({ billboard, onClose }: any) {
+// BillboardModal component
+interface BillboardModalProps {
+  billboard: Billboard | null
+  onClose: () => void
+}
+
+function BillboardModal({ billboard, onClose }: BillboardModalProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const [activeTab, setActiveTab] = useState<"details" | "map">("details")
 
   useEffect(() => {
     if (billboard) {
       document.body.style.overflow = "hidden"
       setCurrentImageIndex(0)
-      setActiveTab("details")
     } else {
+      document.body.style.overflow = "unset"
+    }
+
+    return () => {
       document.body.style.overflow = "unset"
     }
   }, [billboard])
 
   if (!billboard) return null
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active": return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-      case "pending": return "bg-amber-500/10 text-amber-600 border-amber-500/20"
-      case "expired": return "bg-rose-500/10 text-rose-600 border-rose-500/20"
-      case "maintenance": return "bg-sky-500/10 text-sky-600 border-sky-500/20"
-      default: return "bg-slate-500/10 text-slate-600 border-slate-500/20"
+  const nextImage = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (billboard.images && billboard.images.length > 1) {
+      setCurrentImageIndex((prev) => (prev + 1) % billboard.images.length)
     }
   }
 
-  const billboardName = billboard.title || `${billboard.category_data?.name || "Asset"} #${billboard.id}`
-  const currentImage = billboard.images?.[currentImageIndex] || "/placeholder.svg"
+  const prevImage = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (billboard.images && billboard.images.length > 1) {
+      setCurrentImageIndex((prev) => (prev - 1 + billboard.images.length) % billboard.images.length)
+    }
+  }
+
+  const setImageIndex = (e: React.MouseEvent, index: number) => {
+    e.stopPropagation()
+    setCurrentImageIndex(index)
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "active":
+        return "bg-green-100 text-green-800"
+      case "pending":
+        return "bg-yellow-100 text-yellow-800"
+      case "expired":
+        return "bg-red-100 text-red-800"
+      case "maintenance":
+        return "bg-blue-100 text-blue-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case "active":
+        return "Active"
+      case "pending":
+        return "Pending"
+      case "expired":
+        return "Expired"
+      case "maintenance":
+        return "Maintenance"
+      default:
+        return "Unknown"
+    }
+  }
+
+  const getIconComponent = (iconName?: string) => {
+    switch (iconName) {
+      case "monitor":
+        return <Monitor className="h-6 w-6" />
+      case "bus":
+        return <Bus className="h-6 w-6" />
+      default:
+        return <Monitor className="h-6 w-6" />
+    }
+  }
+
+  const currentImage =
+    billboard.images && billboard.images.length > 0
+      ? billboard.images[currentImageIndex]
+      : "/placeholder.svg?height=400&width=600"
+
+  const billboardName = getBillboardName(billboard)
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-6 md:p-12">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-slate-900/80 backdrop-blur-xl"
-          onClick={onClose}
-        />
-
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0, y: 40 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 40 }}
-          transition={{ type: "spring", damping: 25, stiffness: 200 }}
-          className="relative w-full max-w-[1400px] h-full sm:h-auto sm:max-h-[90vh] bg-white sm:rounded-[3rem] shadow-2xl overflow-hidden flex flex-col md:flex-row border border-white/20"
-        >
-          <button
+      {billboard && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-40"
             onClick={onClose}
-            className="absolute top-6 right-6 z-50 p-3 rounded-full bg-black/20 hover:bg-black/40 backdrop-blur-md text-white border border-white/20 transition-all hover:rotate-90 active:scale-90"
-          >
-            <X className="h-6 w-6" />
-          </button>
+          />
 
-          <div className="w-full md:w-3/5 lg:w-2/3 bg-slate-950 relative min-h-[350px] md:min-h-0 overflow-hidden group">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab === "details" ? currentImageIndex : "map"}
-                initial={{ opacity: 0, scale: 1.1 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                className="absolute inset-0"
+          {/* Modal - Full Screen */}
+          <motion.div
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+            className="fixed inset-0 bg-white z-50 overflow-y-auto"
+          >
+            <div className="min-h-full p-6">
+              {/* Close Button */}
+              <button
+                onClick={onClose}
+                className="fixed top-4 right-4 p-3 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors z-10"
               >
-                {activeTab === "details" ? (
-                  <>
-                    <Image src={currentImage} alt={billboardName} fill className="object-cover" priority />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/20" />
-                  </>
-                ) : (
-                  <div className="absolute inset-0 bg-slate-900">
-                    <iframe
-                      src={`https://yandex.ru/map-widget/v1/?ll=${billboard.location.lng}%2C${billboard.location.lat}&z=16&pt=${billboard.location.lng},${billboard.location.lat},pm2rdm`}
-                      width="100%"
-                      height="100%"
-                      style={{ border: 0 }}
-                      title="Asset Location"
-                    />
+                <X className="h-6 w-6" />
+              </button>
+
+              {/* Content */}
+              <div className="max-w-6xl mx-auto space-y-8 pt-16">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div style={{ color: billboard.category_data?.color || "#3b82f6" }}>
+                      {getIconComponent(billboard.category_data?.icon)}
+                    </div>
+                    <h1 className="text-3xl md:text-4xl font-bold">{billboardName}</h1>
+                    <Badge className="bg-green-100 text-green-800">Loaded from API</Badge>
+                  </div>
+                  <Badge className={`${getStatusColor(billboard.status)} text-lg px-4 py-2`}>
+                    {getStatusText(billboard.status)}
+                  </Badge>
+                </div>
+
+                {/* Contractor Card */}
+                {billboard.contractor_data && (
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6">
+                    <div className="flex items-start space-x-4">
+                      <div className="bg-blue-100 p-3 rounded-full">
+                        <Building2 className="h-8 w-8 text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-2xl font-bold text-blue-900 mb-2">{billboard.contractor_data.name}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {billboard.contractor_data.contact_person && (
+                            <div className="flex items-center space-x-2">
+                              <User className="h-4 w-4 text-blue-600" />
+                              <span className="text-blue-800">{billboard.contractor_data.contact_person}</span>
+                            </div>
+                          )}
+                          {billboard.contractor_data.phone && (
+                            <div className="flex items-center space-x-2">
+                              <Phone className="h-4 w-4 text-blue-600" />
+                              <span className="text-blue-800">{billboard.contractor_data.phone}</span>
+                            </div>
+                          )}
+                          {billboard.contractor_data.email && (
+                            <div className="flex items-center space-x-2">
+                              <Mail className="h-4 w-4 text-blue-600" />
+                              <span className="text-blue-800">{billboard.contractor_data.email}</span>
+                            </div>
+                          )}
+                          {billboard.contractor_data.contract_number && (
+                            <div className="flex items-center space-x-2">
+                              <FileText className="h-4 w-4 text-blue-600" />
+                              <span className="text-blue-800">
+                                Contract: {billboard.contractor_data.contract_number}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {billboard.contractor_data.address && (
+                          <div className="mt-3 flex items-start space-x-2">
+                            <MapPin className="h-4 w-4 text-blue-600 mt-0.5" />
+                            <span className="text-blue-800">{billboard.contractor_data.address}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
-              </motion.div>
-            </AnimatePresence>
 
-            {activeTab === "details" && billboard.images?.length > 1 && (
-              <div className="absolute bottom-10 left-0 right-0 flex items-center justify-center gap-10 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <button 
-                  onClick={() => setCurrentImageIndex(prev => (prev - 1 + billboard.images.length) % billboard.images.length)}
-                  className="p-4 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-xl text-white border border-white/10 transition-all hover:-translate-x-2"
-                >
-                  <ChevronLeft className="h-8 w-8" />
-                </button>
-                <div className="flex gap-2">
-                  {billboard.images.map((_: any, idx: number) => (
-                    <div key={idx} className={`h-1.5 rounded-full transition-all duration-500 ${idx === currentImageIndex ? "w-10 bg-white" : "w-2 bg-white/30"}`} />
-                  ))}
-                </div>
-                <button 
-                  onClick={() => setCurrentImageIndex(prev => (prev + 1) % billboard.images.length)}
-                  className="p-4 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-xl text-white border border-white/10 transition-all hover:translate-x-2"
-                >
-                  <ChevronRight className="h-8 w-8" />
-                </button>
-              </div>
-            )}
+                {/* Images and Map Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Images */}
+                  <div className="relative">
+                    <div className="relative aspect-square rounded-3xl overflow-hidden shadow-lg">
+                      <Image
+                        src={currentImage}
+                        alt={`${billboardName} - photo ${currentImageIndex + 1}`}
+                        fill
+                        className="object-cover"
+                      />
 
-            <div className="absolute top-10 left-10 z-10 p-1.5 bg-slate-950/40 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-2xl flex gap-1">
-              <button
-                onClick={() => setActiveTab("details")}
-                className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                  activeTab === "details" ? "bg-white text-slate-950 shadow-xl scale-105" : "text-white/60 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                Gallery
-              </button>
-              <button
-                onClick={() => setActiveTab("map")}
-                className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                  activeTab === "map" ? "bg-white text-slate-950 shadow-xl scale-105" : "text-white/60 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                Location
-              </button>
-            </div>
-          </div>
+                      {/* Image Navigation */}
+                      {billboard.images && billboard.images.length > 1 && (
+                        <>
+                          <button
+                            onClick={prevImage}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full transition-colors"
+                          >
+                            <ChevronLeft className="h-5 w-5" />
+                          </button>
+                          <button
+                            onClick={nextImage}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full transition-colors"
+                          >
+                            <ChevronRight className="h-5 w-5" />
+                          </button>
 
-          <div className="w-full md:w-2/5 lg:w-1/3 flex flex-col h-full bg-white overflow-hidden">
-            <div className="p-10 pt-16 flex-1 overflow-y-auto no-scrollbar space-y-12">
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Badge variant="outline" className={`${getStatusColor(billboard.status)} rounded-full border px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] shadow-sm`}>
-                    {billboard.status}
-                  </Badge>
-                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">ID: {billboard.id}</span>
-                </div>
-                <h2 className="text-4xl lg:text-5xl font-black text-slate-900 leading-[1.05] tracking-tight">
-                  {billboardName}
-                </h2>
-              </div>
-
-              <div className="grid grid-cols-1 gap-8">
-                {[
-                  { icon: MapPin, label: "Address", value: billboard.address, color: "bg-indigo-50 text-indigo-600" },
-                  { icon: Maximize2, label: "Size (HxW)", value: billboard.size, color: "bg-emerald-50 text-emerald-600" },
-                  { icon: Calendar, label: "Term", value: billboard.period, color: "bg-amber-50 text-amber-600" },
-                  { icon: User, label: "Contact", value: billboard.employee_name, color: "bg-rose-50 text-rose-600" }
-                ].map((item, i) => (
-                  <div key={i} className="flex items-start gap-5 group">
-                    <div className={`mt-1 p-3.5 rounded-[1.25rem] ${item.color} shadow-sm group-hover:scale-110 transition-transform duration-300`}>
-                      <item.icon className="h-6 w-6" />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{item.label}</p>
-                      <p className="text-lg font-bold text-slate-900 leading-snug">{item.value || "Not Specified"}</p>
+                          {/* Image Indicators */}
+                          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2">
+                            {billboard.images.map((_, idx) => (
+                              <button
+                                key={idx}
+                                onClick={(e) => setImageIndex(e, idx)}
+                                className={`w-3 h-3 rounded-full transition-colors ${
+                                  idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
 
-              {billboard.description && (
-                <div className="space-y-4 pt-4">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Description</p>
-                  <p className="text-slate-600 leading-relaxed font-medium">
-                    {billboard.description}
-                  </p>
-                </div>
-              )}
-
-              {billboard.contractor_data && (
-                <div className="p-6 rounded-[2rem] bg-slate-50 border border-slate-100 flex items-center gap-5">
-                  <div className="h-14 w-14 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-slate-900">
-                    <Building2 className="h-7 w-7" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Contractor</p>
-                    <p className="text-lg font-black text-slate-900">{billboard.contractor_data.name}</p>
+                  {/* Yandex Map */}
+                  <div className="aspect-square rounded-3xl overflow-hidden bg-gray-100 shadow-lg">
+                    {billboard.location && (
+                      <iframe
+                        src={`https://yandex.ru/map-widget/v1/?ll=${billboard.location.lng}%2C${billboard.location.lat}&mode=search&ol=geo&ouri=ymapsbm1%3A%2F%2Fgeo%3Fdata%3DCgg1NjE1NzQwNhI%2F0KPQt9Cx0LXQutC40YHRgtCw0L0sINCi0LDRiNC60LXQvdGCLCDQvtC70LjQvNC%2F0LjQudGB0LrQuNC5INCy0LjQu9C%2B0Y%2FRgtGCIkEKBQAAAEAQBQAAAEAaJAoSCZOJhEBdUUFAEYOJhEBdUUFAEhIJk4mEQF1RQUARg4mEQF1RQUA%3D&z=16&pt=${billboard.location.lng},${billboard.location.lat},pm2rdm`}
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0 }}
+                        allowFullScreen
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        title={`Yandex Map for ${billboardName}`}
+                      />
+                    )}
                   </div>
                 </div>
-              )}
-            </div>
 
-            <div className="p-10 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between gap-6">
-              <div className="space-y-1">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Inventory Rate</p>
-                <p className="text-3xl font-black text-slate-900 tracking-tighter">{billboard.price || "N/A"}</p>
+                {/* Info Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                  <div className="bg-gray-50 rounded-2xl p-6">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <User className="h-6 w-6 text-gray-500" />
+                      <p className="text-sm text-gray-500 font-medium">Responsible</p>
+                    </div>
+                    <p className="text-lg font-semibold">{billboard.employee_name || "Not specified"}</p>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-2xl p-6">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <Maximize2 className="h-6 w-6 text-gray-500" />
+                      <p className="text-sm text-gray-500 font-medium">Size (HxW)</p>
+                    </div>
+                    <p className="text-lg font-semibold">{billboard.size || "Not specified"}</p>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-2xl p-6">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <MapPin className="h-6 w-6 text-gray-500" />
+                      <p className="text-sm text-gray-500 font-medium">Address</p>
+                    </div>
+                    <p className="text-lg font-semibold">{billboard.address || "Not specified"}</p>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-2xl p-6">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <Calendar className="h-6 w-6 text-gray-500" />
+                      <p className="text-sm text-gray-500 font-medium">Rental Period</p>
+                    </div>
+                    <p className="text-lg font-semibold">{billboard.period || "Not specified"}</p>
+                  </div>
+                </div>
+
+                {/* Description */}
+                {billboard.description && (
+                  <div className="bg-white border border-gray-200 rounded-2xl p-8">
+                    <h3 className="text-2xl font-semibold mb-4">Description</h3>
+                    <p className="text-gray-600 text-lg leading-relaxed">{billboard.description}</p>
+                  </div>
+                )}
+
+                {/* Price */}
+                {billboard.price && (
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-8">
+                    <h3 className="text-xl font-semibold mb-2 text-green-800">Rental Cost</h3>
+                    <p className="text-3xl font-bold text-green-600">{billboard.price}</p>
+                  </div>
+                )}
               </div>
-              <Button className="h-16 px-10 bg-slate-900 text-white rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-slate-800 shadow-2xl shadow-slate-200 transition-all hover:-translate-y-1 active:scale-95">
-                Book Asset
-              </Button>
             </div>
-          </div>
-        </motion.div>
-      </div>
+          </motion.div>
+        </>
+      )}
     </AnimatePresence>
   )
 }
